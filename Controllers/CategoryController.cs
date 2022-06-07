@@ -23,16 +23,22 @@ namespace CloudProperty.Controllers
         public async Task<ActionResult<Category>> Get(int id)
         {
             var category = await this.context.Categories.FindAsync(id);
-            if (category == null)
+            if (category == null) 
+            {
                 return BadRequest("Category not found");
+            }
             return Ok(category);
         }
 
         [HttpPost]
         public async Task<ActionResult<List<Category>>> AddCategory(Category category)
         {
+            category.CreatedAt = DateTime.UtcNow;
+            category.UpdatedAt = DateTime.UtcNow;
             this.context.Categories.Add(category);
+
             await this.context.SaveChangesAsync();
+            
             return Ok(await this.context.Categories.ToListAsync());  
         }
 
@@ -41,9 +47,13 @@ namespace CloudProperty.Controllers
         {
             var category = await this.context.Categories.FindAsync(request.Id);
             if (category == null)
+            {
                 return BadRequest("Category not found");
+            }
+
             category.Description = request.Description; 
             category.ModelName = request.ModelName;
+            category.UpdatedAt = DateTime.UtcNow;
 
             await this.context.SaveChangesAsync();
 
@@ -55,10 +65,14 @@ namespace CloudProperty.Controllers
         {
             var category = await this.context.Categories.FindAsync(id);
             if (category == null)
+            {
                 return BadRequest("Category not found");
+            }
 
             this.context.Categories.Remove(category);
+            
             await this.context.SaveChangesAsync();
+
             return Ok(await this.context.Categories.ToListAsync());
         }
     }
