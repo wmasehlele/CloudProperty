@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CloudProperty.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/category")]
     [ApiController]
     public class CategoryController : ControllerBase
     {
