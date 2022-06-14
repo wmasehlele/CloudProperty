@@ -31,16 +31,31 @@ namespace CloudProperty.Controllers
 
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register(UserDto request) {
-            CreatePasswordHash(request.Password, out string passwordHash);
+            user = await this.context.Users.Where(u => u.Email == request.Email).FirstAsync();
+            
+
+
+            if (user.Email == request.Email)
+            {
+                return BadRequest("User already exists");
+            }
+
+            CreatePasswordHash(request.Password, out string passwordHash);            
             user.Email = request.Email;
             user.Cellphone = request.Cellphone; 
             user.Name = request.Name;
             user.Password = passwordHash;
             user.CreatedAt = DateTime.UtcNow;
             user.UpdatedAt = DateTime.UtcNow;
-            this.context.Users.Add(user);
-            await this.context.SaveChangesAsync();
-            return Ok(await this.context.Users.ToListAsync());       
+            try
+            {
+                this.context.Users.Add(user);
+                await this.context.SaveChangesAsync();
+                return Ok(await this.context.Users.ToListAsync());
+            }
+            catch (Exception ex) {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpPost("login")]
