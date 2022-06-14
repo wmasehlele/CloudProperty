@@ -12,79 +12,81 @@ namespace CloudProperty.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+        private readonly DataContext context;
+
         public static User user = new User();
 
         IConfiguration configuration = null;
 
-        public AuthController(IConfiguration configuration) { 
+        public AuthController(DataContext context, IConfiguration configuration) { 
             this.configuration = configuration;
+            this.context = context;
+        }
+
+        [HttpGet("get-users")]
+        public async Task<ActionResult<List<User>>> GetAllUsers() 
+        {
+            return Ok(await this.context.Users.ToListAsync());
         }
 
         [HttpPost("register")]
         public async Task<ActionResult<User>> Register(UserDto request) {
-            CreatePasswordHash(request.Password, out byte[] passwordHash, out byte[] passwordSalt);
+            CreatePasswordHash(request.Password, out string passwordHash);
             user.Email = request.Email;
-            user.PasswordHash = passwordHash;
-            user.PasswordSalt = passwordSalt;
-
-            return Ok(user);    
-        
+            user.Cellphone = request.Cellphone; 
+            user.Name = request.Name;
+            user.Password = passwordHash;
+            user.CreatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.UtcNow;
+            this.context.Users.Add(user);
+            await this.context.SaveChangesAsync();
+            return Ok(await this.context.Users.ToListAsync());       
         }
 
         [HttpPost("login")]
         public async Task<ActionResult<string>> Login(UserDto request) {
-
-            if (user.Email != request.Email)
+            user = await this.context.Users.Where(u => u.Email == request.Email).FirstAsync();
+            if ( (user.Email != request.Email) || !verifyPasswordHash(request.Password, user.Password))
             {
-                return BadRequest("User not found");
+                return BadRequest("Invalid credentials");
             }
-
-            if (!verifyPasswordHash(request.Password, user.PasswordHash, user.PasswordSalt)) {
-                return BadRequest("Wrong password");
-            }
-
             string token = CreateToken(user);
-            return Ok(token);
-
+            user.Password = token;
+            return Ok(user);
         }
 
         private string CreateToken(User user)
         {
             List<Claim> claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, user.Email)
+                new Claim(ClaimTypes.Name, user.Email),
+                new Claim(ClaimTypes.Role, "Hola")
             };
-
             var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(this.configuration.GetSection("AppSettings:jwt-secrete").Value));
-
             var cred = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
             var token = new JwtSecurityToken(
                 claims: claims, 
                 expires: DateTime.UtcNow.AddHours(1), 
                 signingCredentials: cred );
-
             var jwt = new JwtSecurityTokenHandler().WriteToken(token);  
-
             return jwt;
         }
 
-
-        private void CreatePasswordHash(string password, out byte[] passwordHash, out byte[] passwordSalt)
+        private void CreatePasswordHash(string password, out string passwordHash)
         {
-            using (var hmac = new HMACSHA512())
+            string salt = this.configuration.GetSection("AppSettings:jwt-secrete").Value;
+            byte[] passwordSalt = System.Text.Encoding.UTF8.GetBytes(salt);
+            using (var hmac = new HMACSHA512(passwordSalt))
             {
-                passwordSalt = hmac.Key;
-                passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));   
+                byte[] computeHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+                passwordHash = Convert.ToBase64String(computeHash);
             }
         }
 
-        private bool verifyPasswordHash(string password, byte[] passwordHash, byte[] passwordSalt) 
+        private bool verifyPasswordHash(string password, string passwordHash) 
         {
-            using (var hmac = new HMACSHA512(passwordSalt)) {
-                var computeHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-                return computeHash.SequenceEqual(passwordHash);
-            }        
-        }
-       
+            CreatePasswordHash(password, out string computedHash);
+            return passwordHash == computedHash;
+        }       
     }
 }

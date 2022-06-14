@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using CloudProperty.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace CloudProperty.Data
 {
@@ -6,6 +7,7 @@ namespace CloudProperty.Data
     {
         public DataContext(DbContextOptions<DataContext> options) : base(options) { }
 
-        public DbSet<Category> Categories { get; set; } 
+        public DbSet<Category> Categories { get; set; }
+        public DbSet<User> Users { get; set; }
     }
 }

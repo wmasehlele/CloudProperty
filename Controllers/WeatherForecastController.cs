@@ -1,9 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CloudProperty.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/weather")]
     public class WeatherForecastController : ControllerBase
     {
         private static readonly string[] Summaries = new[]
@@ -19,7 +20,7 @@ namespace CloudProperty.Controllers
         }
 
         [HttpGet]
-        [Route("weather")]
+        [Route("forcast"), Authorize(Roles = "Admin")]
         public IEnumerable<WeatherForecast> Get()
         {
             return Enumerable.Range(1, 5).Select(index => new WeatherForecast
