@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using CloudProperty.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CloudProperty.Controllers
 {
@@ -13,9 +15,14 @@ namespace CloudProperty.Controllers
             this.context = context;
         }
 
-        [HttpGet]
+        [HttpGet, Authorize]
         public async Task<ActionResult<List<Category>>> Get()
         {
+            //string authUserId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            //var user = new User().GetUserById(Convert.ToInt32(authUserId));
+
+            //return Ok(user);
+
             return Ok(await this.context.Categories.ToListAsync());
         }
 

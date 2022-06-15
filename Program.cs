@@ -21,7 +21,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     {
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8
-        .GetBytes(builder.Configuration.GetSection("AppSettings:jwt-secrete").Value)),
+        .GetBytes(builder.Configuration.GetSection("AppSettings:secrete").Value)),
         ValidateIssuer = false,
         ValidateAudience = false  
     };
@@ -33,7 +33,7 @@ var app = builder.Build();
 
 app.UseHttpsRedirection();
 
-app.UseAuthorization();
+app.UseAuthentication();
 
 app.UseAuthorization();
 
