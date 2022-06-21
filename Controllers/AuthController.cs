@@ -21,6 +21,8 @@ namespace CloudProperty.Controllers
        
         public AuthController() { }
 
+        // test some changes
+
         public AuthController(DataContext context, IConfiguration configuration) { 
             this.configuration = configuration;
             this.context = context;
@@ -99,7 +101,7 @@ namespace CloudProperty.Controllers
             
             user = await this.context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
-            if (user != null)
+            if (user == null)
             {
                 return BadRequest("User already exists");
             }
