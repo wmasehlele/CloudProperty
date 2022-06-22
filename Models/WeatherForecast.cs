@@ -1,4 +1,4 @@
-namespace CloudProperty
+namespace CloudProperty.Models
 {
     public class WeatherForecast
     {

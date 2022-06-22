@@ -7,11 +7,11 @@ namespace CloudProperty.Controllers
 {
     [Route("api/category")]
     [ApiController]
-    public class CategoryController : ControllerBase
+    public class CategoryController : AppController
     {
-        private readonly DataContext context;
+        private readonly DatabaseContext context;
 
-        public CategoryController(DataContext context) {
+        public CategoryController(DatabaseContext context) {
             this.context = context;
         }
 

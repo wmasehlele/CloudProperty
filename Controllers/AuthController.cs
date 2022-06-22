@@ -1,33 +1,24 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using CloudProperty.Models;
-using System.Security.Cryptography;
-using System.Security.Claims;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
-using System.Security.Authentication;
 
 namespace CloudProperty.Controllers
 {
     [Route("api/auth")]
     [ApiController]
-    public class AuthController : ControllerBase
+    public class AuthController : AppController
     {
-        private readonly DataContext context;
-        private readonly IConfiguration configuration;
-        private int authUserId = 0;
         private User user =  new User();
         private LookupToken lookupToken = new LookupToken();
        
-        public AuthController() { }
+        public AuthController(DatabaseContext context, IConfiguration configuration, DataCache redisCache) {
+            
+            _context = context;
+            _configuration = configuration;
+            _dataCache = redisCache;
 
-        // test some changes
-
-        public AuthController(DataContext context, IConfiguration configuration) { 
-            this.configuration = configuration;
-            this.context = context;
-            user = new User(this.context);
-            lookupToken = new LookupToken(this.context);    
+            user = new User(_context);
+            lookupToken = new LookupToken(_context);    
         }
 
         [HttpGet("get-users"), Authorize]
@@ -36,19 +27,18 @@ namespace CloudProperty.Controllers
             return Ok(await user.GetAllUsers());
         }
 
-        [HttpPost("request-contact-verification"), Authorize]
-        public async Task<ActionResult<string>> RequestContactVerification(UserDto request)
+        [HttpGet("request-contact-verification/{userId}"), Authorize]
+        public async Task<ActionResult<string>> RequestContactVerification(int userId)
         {
             string contactType = Request.Query["contactType"].ToString();
-            var refreshToken = Request.Cookies["refreshToken"];
-            user = await this.context.Users.Where(
-                u => u.JwtToken == refreshToken && u.JwtTokenExpiresAt > DateTime.UtcNow
-            ).FirstOrDefaultAsync();
 
-            if (user == null) { return BadRequest("Invalid credentials"); }
+            user = await this.user.GetUserById(AuthUserID);
 
-            string otp = "85632";
-            HttpContext.Session.SetString("cellphone-verification", otp);
+            if (user == null) { return Unauthorized(); }
+
+            int otp = user.GenerateOtp(10,5);
+            string cacheKey = user.Id.ToString() + "-contact-verification";
+            _dataCache.SetCacheValue(cacheKey, otp.ToString());
 
             if (contactType == "email")
             {
@@ -57,57 +47,39 @@ namespace CloudProperty.Controllers
 
             if (contactType == "cellphone")
             {
-                // sms the opt                
+                // sms the opt
             }
             return Ok(otp);
         }
 
-        [HttpPost("contact-verification"), Authorize]
-        public async Task<ActionResult<string>> ContactVerification(UserDto request)
+        [HttpPost("contact-verification/{userId}/{userOpt}"), Authorize]
+        public async Task<ActionResult<string>> ContactVerification(int userId, int userOpt)
         {
-            string contactType = Request.Query["contactType"].ToString();
-            var refreshToken = Request.Cookies["refreshToken"];
-            user = await this.context.Users.Where(
-                u => u.JwtToken == refreshToken && u.JwtTokenExpiresAt > DateTime.UtcNow
-            ).FirstOrDefaultAsync();
+            user = await this.user.GetUserById(AuthUserID);
 
-            if (user != null)
-            {
-                if (contactType == "email")
-                {
-                    lookupToken.Action = "email-verification";
-                    lookupToken.ModelName = "User";
-                    lookupToken.ModelData = user.Id.ToString();
-                    lookupToken = await lookupToken.CreateLookupToken(lookupToken);
-                    string host = this.configuration.GetSection("AppSettings:baseUrl").Value.ToString();
-                    string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
-                    // add function for emailing back to user.
-                    return url;
-                }
+            if (user == null) { return Unauthorized(); }
 
-                if (contactType == "cellphone")
-                {
-                    // cache this code.
-                    string otp = "85632";
-                    HttpContext.Session.SetString("cellphone-verification", otp);
-                    return otp;
-                }
+            string cacheKey = user.Id.ToString() + "-contact-verification";
+            int opt = Convert.ToInt32(await _dataCache.GetCachedValue(cacheKey));
+            if (userOpt != opt) {
+                return BadRequest("Invalid or expired Otp");
             }
-            return "";
+            return Ok(opt);
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<User>> Register(UserDto request) {
-            
-            user = await this.context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+        public async Task<ActionResult<User>> Register(User request) {
 
-            if (user == null)
+            if (String.IsNullOrEmpty(request.Password) || String.IsNullOrEmpty(request.Email)) 
             {
-                return BadRequest("User already exists");
+                return BadRequest("Missing information for user registration");
             }
 
-            if (request.Password != request.PasswordConfirmation) {
-                return BadRequest("Passwords do not match");
+            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+
+            if (user != null)
+            {
+                return BadRequest("User already exists");
             }
 
             user = new User();
@@ -120,8 +92,8 @@ namespace CloudProperty.Controllers
             user.UpdatedAt = DateTime.UtcNow;
             try
             {
-                this.context.Users.Add(user);
-                await this.context.SaveChangesAsync();
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
                 return Ok(user);
             }
             catch (Exception ex) {
@@ -130,9 +102,9 @@ namespace CloudProperty.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<string>> Login(UserDto request) {
+        public async Task<ActionResult<string>> Login(User request) {
 
-            user = await this.context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
             if (user == null)
             {
@@ -145,8 +117,8 @@ namespace CloudProperty.Controllers
             }
             string token = CreateToken(user);
             var refreshToken = GenerateRefreshToken(user);
-            await SetRefreshToken(refreshToken);
-            user.JwtToken = token;
+            await SetRefreshToken(refreshToken, user);
+            user.RefreshToken = token;
             return Ok(token);
         }
 
@@ -154,8 +126,8 @@ namespace CloudProperty.Controllers
         public async Task<ActionResult<User>> RefreshToken() 
         {
             var refreshToken = Request.Cookies["refreshToken"];
-            user = await this.context.Users.Where(
-                u => u.JwtToken == refreshToken && u.JwtTokenExpiresAt > DateTime.UtcNow
+            user = await _context.Users.Where(
+                u => u.RefreshToken == refreshToken && u.RefreshTokenExpiresAt > DateTime.UtcNow
             ).FirstOrDefaultAsync();
             
             if (user == null) {
@@ -163,14 +135,14 @@ namespace CloudProperty.Controllers
             }
             string token = CreateToken(user);
             var newRefreshToken = GenerateRefreshToken(user);
-            await SetRefreshToken(newRefreshToken);            
+            await SetRefreshToken(newRefreshToken, user);            
             return Ok(token);
         }
 
         [HttpPost("request-password-reset")]
-        public async Task<ActionResult<string>> RequestPasswordReset(UserDto request)
+        public async Task<ActionResult<string>> RequestPasswordReset(User request)
         {
-            user = await this.context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
             if (user != null)
             {
@@ -179,7 +151,7 @@ namespace CloudProperty.Controllers
                 lookupToken.ModelData = user.Id.ToString();
                 lookupToken = await lookupToken.CreateLookupToken(lookupToken);
 
-                string host = this.configuration.GetSection("AppSettings:baseUrl").Value.ToString();
+                string host = _configuration.GetSection("AppSettings:baseUrl").Value.ToString();
                 string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
                 // add function for emailing back to user.
                 return url;
@@ -188,114 +160,40 @@ namespace CloudProperty.Controllers
         }
 
         [HttpPost("reset-password")]
-        public async Task<ActionResult<string>> ResetPassword(UserDto request) {
+        public async Task<ActionResult<string>> ResetPassword(User request) {
+
+            if (String.IsNullOrEmpty(request.Password))
+            {
+                return BadRequest("Missing information for password reset");
+            }
 
             string token = Request.Query["uid"].ToString();
-            lookupToken = await this.context.LookupTokens.Where(t => t.Token == token).FirstOrDefaultAsync();
+            lookupToken = await _context.LookupTokens.Where(t => t.Token == token && t.ExpiresAt < DateTime.UtcNow ).FirstOrDefaultAsync();
 
             if (lookupToken == null) { return BadRequest("Invalid or expired password reset url"); }
 
-            user = await this.context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+            user = await user.GetUserById(Convert.ToInt32(lookupToken.ModelData));
 
-            if (user == null || user.Id != Convert.ToInt32(lookupToken.ModelData))
+            if (user == null)
             {
                 return BadRequest("Password reset failed");
             }
 
-            if (request.Password != request.PasswordConfirmation)
-            {
-                return BadRequest("Passwords do not match");
-            }
-
             CreatePasswordHash(request.Password, out string passwordHash);
             user.Password = passwordHash;
-            user.JwtToken = null;
-            user.JwtTokenCreatedAt = null;
-            user.JwtTokenExpiresAt = null;
+            user.RefreshToken = null;
+            user.RefreshTokenCreatedAt = null;
+            user.RefreshTokenExpiresAt = null;
             user.UpdatedAt = DateTime.UtcNow;
             try
             {
-                await this.context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
                 return Ok( await user.GetUserById(user.Id) );
             }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
             }
-        }
-
-        private RefreshToken GenerateRefreshToken(User user) 
-        {
-            var refreshToken = new RefreshToken
-            {
-                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddHours(1)
-            }; 
-            return refreshToken;
-        }
-
-        private async Task<bool> SetRefreshToken(RefreshToken newRefreshToken) 
-        {
-            var cookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Expires = newRefreshToken.ExpiresAt
-            };
-            Response.Cookies.Append("refreshToken", newRefreshToken.Token, cookieOptions);
-
-            user.JwtToken = newRefreshToken.Token;
-            user.JwtTokenCreatedAt = newRefreshToken.CreatedAt;
-            user.JwtTokenExpiresAt = newRefreshToken.ExpiresAt;
-            user.UpdatedAt = newRefreshToken.CreatedAt;
-            await this.context.SaveChangesAsync();
-            return true;
-        }
-
-        private string CreateToken(User user)
-        {
-            List<Claim> claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Email),
-
-                //new Claim(ClaimTypes.Role, "Hola")
-            };
-            var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(this.configuration.GetSection("AppSettings:secrete").Value));
-            var cred = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
-            var token = new JwtSecurityToken(
-                claims: claims, 
-                expires: DateTime.UtcNow.AddHours(1), 
-                signingCredentials: cred );
-            var jwt = new JwtSecurityTokenHandler().WriteToken(token);  
-            return jwt;
-        }
-
-        private void CreatePasswordHash(string password, out string passwordHash)
-        {
-            string salt = this.configuration.GetSection("AppSettings:secrete").Value;
-            byte[] passwordSalt = System.Text.Encoding.UTF8.GetBytes(salt);
-            using (var hmac = new HMACSHA512(passwordSalt))
-            {
-                byte[] computeHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
-                passwordHash = Convert.ToBase64String(computeHash);
-            }
-        }
-
-        private bool verifyPasswordHash(string password, string passwordHash) 
-        {
-            CreatePasswordHash(password, out string computedHash);
-            return passwordHash == computedHash;
-        }
-        public async Task<UserDTO> GetAuthUser()
-        {
-            if (!User.Identity.IsAuthenticated)
-                throw new AuthenticationException();
-
-            string authUserId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier).Value;
-            this.authUserId = int.Parse(authUserId);
-
-            return await user.GetUserById( this.authUserId );
         }
     }
 }

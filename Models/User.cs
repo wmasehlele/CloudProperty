@@ -1,22 +1,13 @@
-﻿using System.Security.Authentication;
-using System.Security.Claims;
-
-namespace CloudProperty.Models
+﻿namespace CloudProperty.Models
 {
-    public class UserDTO 
+    public class RefreshToken
     {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public string Cellphone { get; set; } = string.Empty;
-        public DateTime? EmailVerifiedAt { get; set; }
-        public DateTime? CellphoneVerifiedAt { get; set; }
-        public string? JwtToken { get; set; }
+        public string Token { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; }
     }
 
-    public class User
+    public class User : AppModel
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
@@ -25,53 +16,53 @@ namespace CloudProperty.Models
         public DateTime? EmailVerifiedAt { get; set; }
         public DateTime? CellphoneVerifiedAt { get; set; }
         public string Password { get; set; }
-        public string? JwtToken { get; set; }
-        public DateTime? JwtTokenCreatedAt { get; set; }
-        public DateTime? JwtTokenExpiresAt { get; set; }
+        public string? RefreshToken { get; set; }
+        public DateTime? RefreshTokenCreatedAt { get; set; }
+        public DateTime? RefreshTokenExpiresAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        private readonly DataContext context;
+        private readonly DatabaseContext context;
 
         public User() { }
 
-        public User (DataContext  context) {
+        public User (DatabaseContext  context) {
             this.context = context;
         }
 
-        public async Task<List<UserDTO>> GetAllUsers() {
-            var UserDTO = new List<UserDTO>();
-            UserDTO = await this.context.Users
-                    .Select(UserDTO => new UserDTO() {
-                        Id = UserDTO.Id,
-                        Name = UserDTO.Name,
-                        Email = UserDTO.Email,
-                        Cellphone = UserDTO.Cellphone,
-                        EmailVerifiedAt = UserDTO.EmailVerifiedAt,
-                        JwtToken = UserDTO.JwtToken,
-                        CreatedAt = UserDTO.CreatedAt,
-                        UpdatedAt = UserDTO.UpdatedAt
+        public async Task<List<User>> GetAllUsers() {
+            var user = new List<User>();
+            user = await this.context.Users
+                    .Select(user => new User() {
+                        Id = user.Id,
+                        Name = user.Name,
+                        Email = user.Email,
+                        Cellphone = user.Cellphone,
+                        EmailVerifiedAt = user.EmailVerifiedAt,
+                        RefreshToken = user.RefreshToken,
+                        CreatedAt = user.CreatedAt,
+                        UpdatedAt = user.UpdatedAt
                     }).ToListAsync();
-            return UserDTO;
+            return user;
         }
 
-        public async Task<UserDTO> GetUserById(int Id)
+        public async Task<User> GetUserById(int Id)
         {
-            var UserDTO = new UserDTO();
-            UserDTO = await this.context.Users
+            var user = new User();
+            user = await this.context.Users
                     .Where(u => u.Id == Id)
-                    .Select(UserDTO => new UserDTO()
+                    .Select(user => new User()
                     {
-                        Id = UserDTO.Id,
-                        Name = UserDTO.Name,
-                        Email = UserDTO.Email,
-                        Cellphone = UserDTO.Cellphone,
-                        EmailVerifiedAt = UserDTO.EmailVerifiedAt,
-                        JwtToken = UserDTO.JwtToken,
-                        CreatedAt = UserDTO.CreatedAt,
-                        UpdatedAt = UserDTO.UpdatedAt
+                        Id = user.Id,
+                        Name = user.Name,
+                        Email = user.Email,
+                        Cellphone = user.Cellphone,
+                        EmailVerifiedAt = user.EmailVerifiedAt,
+                        RefreshToken = user.RefreshToken,
+                        CreatedAt = user.CreatedAt,
+                        UpdatedAt = user.UpdatedAt
                     }).FirstOrDefaultAsync();
-            return UserDTO;
+            return user;
         }
     }
 }   

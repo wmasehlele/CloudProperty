@@ -14,13 +14,13 @@ namespace CloudProperty.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        private readonly DataContext context;
+        private readonly DatabaseContext context;
 
         internal static readonly char[] chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".ToCharArray();
         const int KEY_SIZE = 32;
 
         public LookupToken() { }
-        public LookupToken (DataContext context)
+        public LookupToken (DatabaseContext context)
         {
             this.context = context;
         }

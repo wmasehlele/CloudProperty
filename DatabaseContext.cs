@@ -1,14 +1,14 @@
 ﻿using CloudProperty.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
-namespace CloudProperty.Data
+namespace CloudProperty
 {
-    public class DataContext : DbContext
+    public class DatabaseContext : DbContext
     {
-        public DataContext(DbContextOptions<DataContext> options) : base(options) { }
+        public DatabaseContext(DbContextOptions<DatabaseContext> options) : base(options) { }
         public DbSet<User> Users { get; set; }
         public DbSet<LookupToken> LookupTokens { get; set; }
         public DbSet<Category> Categories { get; set; }
-
     }
 }

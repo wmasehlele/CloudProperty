@@ -1,5 +1,6 @@
 global using CloudProperty.Data;
 global using Microsoft.EntityFrameworkCore;
+using CloudProperty;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -10,9 +11,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-builder.Services.AddDbContext<DataContext>(options =>
+builder.Services.AddDbContext<DatabaseContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
+
+builder.Services.AddDistributedRedisCache(options =>
+{    
+    options.Configuration = builder.Configuration.GetConnectionString("CacheConnection");
+    options.InstanceName = "master";
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -26,6 +33,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         ValidateAudience = false  
     };
 });
+
+builder.Services.AddTransient<DataCache>();
 
 var app = builder.Build();
 
