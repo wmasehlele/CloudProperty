@@ -1,6 +1,7 @@
 global using CloudProperty.Data;
 global using Microsoft.EntityFrameworkCore;
 using CloudProperty;
+using CloudProperty.Sevices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -35,6 +36,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 
 builder.Services.AddTransient<DataCache>();
+builder.Services.AddTransient<BlobStorage>();
 
 var app = builder.Build();
 

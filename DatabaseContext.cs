@@ -10,5 +10,6 @@ namespace CloudProperty
         public DbSet<User> Users { get; set; }
         public DbSet<LookupToken> LookupTokens { get; set; }
         public DbSet<Category> Categories { get; set; }
+        public DbSet<FileStorage> Blobs { get; set; }
     }
 }
