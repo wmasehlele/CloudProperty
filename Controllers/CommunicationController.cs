@@ -19,12 +19,17 @@ namespace CloudProperty.Controllers
         public async Task<ActionResult<string>> SendEmail(List<IFormFile> attachments, IFormCollection fileForm) {
 
             SendEmailDTO sendEmailDto = new SendEmailDTO();
-            sendEmailDto.ToEmail = fileForm["ToEmail"];
+            sendEmailDto.emailRecipients = new List<EmailRecipient> {
+                new EmailRecipient(fileForm["ToEmail"], fileForm["ToName"]),
+                new EmailRecipient("masehlele.moela@gmail.com", "Masehlele Moela"),
+            };
             sendEmailDto.Subject = fileForm["Subject"];
             sendEmailDto.Body = fileForm["Body"];
             sendEmailDto.Attachments = attachments;
 
-            bool sent = await _communicationService.SendEmailAsync(sendEmailDto);
+            if (sendEmailDto.emailRecipients.Count == 0) { return BadRequest("No receipients specified"); }
+
+            bool sent = await _communicationService.SendEmail(sendEmailDto);
             if (!sent)
             {
                 // log here that email failed to sent....

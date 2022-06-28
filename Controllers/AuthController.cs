@@ -105,13 +105,13 @@ namespace CloudProperty.Controllers
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                // send welcome email...
+                // send welcome email...                
                 SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.ToEmail = user.Email;
+                sendEmailDto.emailRecipients.Add(new EmailRecipient(user.Email, user.Name));
                 sendEmailDto.Subject = "Welcome to cloudproperty";
                 sendEmailDto.Body = "Dear Client. Welcome to the best rental property management community. attached is your welcome guide.";
 
-                bool sent = await _communicationService.SendEmailAsync(sendEmailDto);
+                bool sent = await _communicationService.SendEmail(sendEmailDto);
                 if (!sent) { 
                     // log here that email failed to sent....
                 }

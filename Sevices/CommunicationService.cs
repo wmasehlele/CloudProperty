@@ -19,11 +19,25 @@ namespace CloudProperty.Sevices
             _mailSettingsService = mailSettings.Value;
         }
 
-        public async Task<bool> SendEmailAsync(SendEmailDTO sendEmailDto)
+        public async Task<bool> SendEmail(SendEmailDTO sendEmailDto)
         {
             var email = new MimeMessage();
             email.From.Add(new MailboxAddress(_mailSettingsService.DisplayName, _mailSettingsService.Mail));
-            email.To.Add(new MailboxAddress(null, sendEmailDto.ToEmail));
+
+            if (sendEmailDto.emailRecipients.Count == 0) { return false; }
+
+            foreach (var recipient in sendEmailDto.emailRecipients)
+            {
+                if (sendEmailDto.emailRecipients.Count > 1)
+                {
+                    email.Bcc.Add(new MailboxAddress(recipient.Name, recipient.Email));
+                }
+                else
+                {
+                    email.To.Add(new MailboxAddress(recipient.Name, recipient.Email));
+                }
+            }
+            
             email.Subject = sendEmailDto.Subject;
             
             var builder = new BodyBuilder();
@@ -80,8 +94,5 @@ namespace CloudProperty.Sevices
             await _context.SaveChangesAsync();
             return true;
         }
-
-
-
     }
 }

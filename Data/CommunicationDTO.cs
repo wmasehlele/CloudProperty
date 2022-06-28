@@ -13,10 +13,21 @@
     }
 
     public class SendEmailDTO {
-        public string ToEmail { get; set; }
+        public List<EmailRecipient> emailRecipients { get; set; }
         public string Subject { get; set; }
-        public string Body { get; set; }
+        public string Body { get; set; } 
         public List<IFormFile> Attachments { get; set; }
     }
 
+    public class EmailRecipient {
+
+        public string Email { get; set; }
+        public string Name { get; set; } = string.Empty;
+
+        public EmailRecipient(string email, string name)
+        {
+            Email = email;
+            Name = name;
+        }   
+    }
 }
