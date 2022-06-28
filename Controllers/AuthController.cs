@@ -11,6 +11,7 @@ namespace CloudProperty.Controllers
     {
         private LookupTokenService _lookupTokenService;
         private CommunicationService _communicationService;
+        private TemplateService _templateService;
 
         private LookupTokenDTO lookupTokenDto;
         private UserDTO userDto;
@@ -21,7 +22,8 @@ namespace CloudProperty.Controllers
             DataCacheService dataCacheService, 
             UserService userService, 
             LookupTokenService lookupTokenService,
-            CommunicationService communicationService) 
+            CommunicationService communicationService,
+            TemplateService templateService) 
         {
             
             _context = context;
@@ -30,6 +32,7 @@ namespace CloudProperty.Controllers
             _userService = userService;
             _lookupTokenService = lookupTokenService;
             _communicationService = communicationService;
+            _templateService = templateService;
 
             userDto = new UserDTO();
             lookupTokenDto = new LookupTokenDTO();
@@ -55,6 +58,18 @@ namespace CloudProperty.Controllers
             if (contactType == "email")
             {
                 // email the otp
+                SendEmailDTO sendEmailDto = new SendEmailDTO();
+                sendEmailDto.emailRecipients = new List<EmailRecipient> {
+                    new EmailRecipient(userDto.Email, userDto.Name)
+                };
+                sendEmailDto.Subject = "Email verification code";
+                int templateId = 2;
+                sendEmailDto.Body = await _templateService.GetEmailVerificationMailTemplate(templateId, userDto, otp);
+
+                bool sent = await _communicationService.SendEmail(sendEmailDto);
+                if (!sent) { 
+                    // do something
+                }
             }
 
             if (contactType == "cellphone")
@@ -67,6 +82,8 @@ namespace CloudProperty.Controllers
         [HttpGet("contact-verification/{userOtp}"), Authorize]
         public async Task<ActionResult<string>> ContactVerification(int userOtp)
         {
+            string contactType = Request.Query["contactType"].ToString();
+
             userDto = await _userService.GetUserById(AuthUserID);
             if (userDto == null) { return Unauthorized(); }
             string cacheKey = userDto.Id.ToString() + "-contact-verification";
@@ -75,6 +92,20 @@ namespace CloudProperty.Controllers
             if (userOtp != opt) {
                 return BadRequest("Invalid or expired Otp");
             }
+
+            var user = await _context.Users.FindAsync(AuthUserID);
+            if (contactType == "email")
+            {
+                user.EmailVerifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            } 
+            
+            if (contactType == "cellphone")
+            {
+                user.CellphoneVerifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
             return Ok(opt);
         }
 
@@ -107,17 +138,17 @@ namespace CloudProperty.Controllers
 
                 // send welcome email...                
                 SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.emailRecipients.Add(new EmailRecipient(user.Email, user.Name));
+                sendEmailDto.emailRecipients = new List<EmailRecipient> {
+                    new EmailRecipient(user.Email, user.Name)
+                };
                 sendEmailDto.Subject = "Welcome to cloudproperty";
-                sendEmailDto.Body = "Dear Client. Welcome to the best rental property management community. attached is your welcome guide.";
+                int templateId = 1;
+                sendEmailDto.Body = await _templateService.GetWelcomeMailTemplate(templateId, request);
 
                 bool sent = await _communicationService.SendEmail(sendEmailDto);
                 if (!sent) { 
                     // log here that email failed to sent....
                 }
-
-
-
 
                 return Ok(await _userService.GetUserById(user.Id));
             }
@@ -180,6 +211,21 @@ namespace CloudProperty.Controllers
                 string host = _configuration.GetSection("AppSettings:baseUrl").Value.ToString();
                 string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
                 // add function for emailing back to user.
+
+                // send welcome email...                
+                SendEmailDTO sendEmailDto = new SendEmailDTO();
+                sendEmailDto.emailRecipients = new List<EmailRecipient> {
+                    new EmailRecipient(user.Email, user.Name)
+                };
+                sendEmailDto.Subject = "Request for password rest";
+                int templateId = 3;
+                sendEmailDto.Body = await _templateService.GetPasswordResetMailTemplate(templateId, user, url);
+
+                bool sent = await _communicationService.SendEmail(sendEmailDto);
+                if (!sent)
+                {
+                    // log here that email failed to sent....
+                }
                 return url;
             }
             return "";
@@ -215,6 +261,22 @@ namespace CloudProperty.Controllers
             try
             {
                 await _context.SaveChangesAsync();
+
+                // send welcome email...                
+                SendEmailDTO sendEmailDto = new SendEmailDTO();
+                sendEmailDto.emailRecipients = new List<EmailRecipient> {
+                    new EmailRecipient(user.Email, user.Name)
+                };
+                sendEmailDto.Subject = "Password updated";
+                int templateId = 4;
+                sendEmailDto.Body = await _templateService.GetPasswordUpdatedMailTemplate(templateId, user);
+
+                bool sent = await _communicationService.SendEmail(sendEmailDto);
+                if (!sent)
+                {
+                    // log here that email failed to sent....
+                }
+
                 return Ok( await _userService.GetUserById(user.Id) );
             }
             catch (Exception ex)

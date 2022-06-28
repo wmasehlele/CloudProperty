@@ -42,6 +42,7 @@ builder.Services.AddTransient<DataCacheService>();
 builder.Services.AddTransient<FileStorageService>();
 builder.Services.AddTransient<LookupTokenService>();
 builder.Services.AddTransient<CommunicationService>();
+builder.Services.AddTransient<TemplateService>();
 
 var app = builder.Build();
 

@@ -12,11 +12,13 @@ namespace CloudProperty.Sevices
 
         private readonly DatabaseContext _context;
         private readonly MailSettingsService _mailSettingsService;
+        private readonly TemplateService _templateService;
 
-        public CommunicationService(DatabaseContext context, IOptions<MailSettingsService> mailSettings)
+        public CommunicationService(DatabaseContext context, IOptions<MailSettingsService> mailSettings, TemplateService templateService)
         {
             _context = context;
             _mailSettingsService = mailSettings.Value;
+            _templateService = templateService;
         }
 
         public async Task<bool> SendEmail(SendEmailDTO sendEmailDto)
