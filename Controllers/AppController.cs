@@ -1,4 +1,5 @@
 ﻿using CloudProperty.Models;
+using CloudProperty.Sevices;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -12,7 +13,8 @@ namespace CloudProperty.Controllers
         protected int AuthUserID => int.Parse(FindClaim(ClaimTypes.NameIdentifier));
         protected DatabaseContext _context;
         protected IConfiguration _configuration;
-        protected DataCache _dataCache;
+        protected DataCacheService _dataCacheService;
+        protected UserService _userService;
 
         protected string FindClaim(string claimName)
         {
@@ -90,6 +92,17 @@ namespace CloudProperty.Controllers
         {
             CreatePasswordHash(password, out string computedHash);
             return passwordHash == computedHash;
+        }
+
+        public int GenerateOtp(int maxRange = 10, int maxDigits = 5)
+        {
+            string randomNo = String.Empty;
+            Random rnd = new Random();
+            for (int j = 0; j < 5; j++)
+            {
+                randomNo = randomNo + rnd.Next(0, 10).ToString();
+            }
+            return Convert.ToInt32(randomNo);
         }
     }
 }

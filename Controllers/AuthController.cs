@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using CloudProperty.Models;
 using Microsoft.AspNetCore.Authorization;
+using CloudProperty.Sevices;
 
 namespace CloudProperty.Controllers
 {
@@ -8,37 +9,48 @@ namespace CloudProperty.Controllers
     [ApiController]
     public class AuthController : AppController
     {
-        private User user =  new User();
-        private LookupToken lookupToken = new LookupToken();
+        private LookupTokenService _lookupTokenService;
+        private CommunicationService _communicationService;
+
+        private LookupTokenDTO lookupTokenDto;
+        private UserDTO userDto;
        
-        public AuthController(DatabaseContext context, IConfiguration configuration, DataCache redisCache) {
+        public AuthController(
+            DatabaseContext context, 
+            IConfiguration configuration, 
+            DataCacheService dataCacheService, 
+            UserService userService, 
+            LookupTokenService lookupTokenService,
+            CommunicationService communicationService) 
+        {
             
             _context = context;
             _configuration = configuration;
-            _dataCache = redisCache;
+            _dataCacheService = dataCacheService;
+            _userService = userService;
+            _lookupTokenService = lookupTokenService;
+            _communicationService = communicationService;
 
-            user = new User(_context);
-            lookupToken = new LookupToken(_context);    
+            userDto = new UserDTO();
+            lookupTokenDto = new LookupTokenDTO();
         }
 
         [HttpGet("get-users"), Authorize]
-        public async Task<ActionResult<List<User>>> GetUsers() 
+        public async Task<ActionResult<List<UserDTO>>> GetUsers() 
         {            
-            return Ok(await user.GetAllUsers());
+            return Ok(await _userService.GetAllUsers());
         }
 
-        [HttpGet("request-contact-verification/{userId}"), Authorize]
-        public async Task<ActionResult<string>> RequestContactVerification(int userId)
+        [HttpGet("request-contact-verification"), Authorize]
+        public async Task<ActionResult<string>> RequestContactVerification()
         {
             string contactType = Request.Query["contactType"].ToString();
+            userDto = await _userService.GetUserById(AuthUserID);
+            if (userDto == null) { return Unauthorized(); }
 
-            user = await this.user.GetUserById(AuthUserID);
-
-            if (user == null) { return Unauthorized(); }
-
-            int otp = user.GenerateOtp(10,5);
-            string cacheKey = user.Id.ToString() + "-contact-verification";
-            _dataCache.SetCacheValue(cacheKey, otp.ToString());
+            int otp = GenerateOtp(10,5);
+            string cacheKey = userDto.Id.ToString() + "-contact-verification";
+            _dataCacheService.SetCacheValue(cacheKey, otp.ToString());
 
             if (contactType == "email")
             {
@@ -49,34 +61,32 @@ namespace CloudProperty.Controllers
             {
                 // sms the opt
             }
-            return Ok(otp);
+            return Ok(await _dataCacheService.GetCachedValue(cacheKey));
         }
 
-        [HttpPost("contact-verification/{userId}/{userOpt}"), Authorize]
-        public async Task<ActionResult<string>> ContactVerification(int userId, int userOpt)
+        [HttpGet("contact-verification/{userOtp}"), Authorize]
+        public async Task<ActionResult<string>> ContactVerification(int userOtp)
         {
-            user = await this.user.GetUserById(AuthUserID);
+            userDto = await _userService.GetUserById(AuthUserID);
+            if (userDto == null) { return Unauthorized(); }
+            string cacheKey = userDto.Id.ToString() + "-contact-verification";
 
-            if (user == null) { return Unauthorized(); }
-
-            string cacheKey = user.Id.ToString() + "-contact-verification";
-            int opt = Convert.ToInt32(await _dataCache.GetCachedValue(cacheKey));
-            if (userOpt != opt) {
+            int opt = Convert.ToInt32(await _dataCacheService.GetCachedValue(cacheKey));
+            if (userOtp != opt) {
                 return BadRequest("Invalid or expired Otp");
             }
             return Ok(opt);
         }
 
         [HttpPost("register")]
-        public async Task<ActionResult<User>> Register(User request) {
+        public async Task<ActionResult<UserDTO>> Register(UserDTO request) {
 
             if (String.IsNullOrEmpty(request.Password) || String.IsNullOrEmpty(request.Email)) 
             {
                 return BadRequest("Missing information for user registration");
             }
 
-            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
-
+            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
             if (user != null)
             {
                 return BadRequest("User already exists");
@@ -88,13 +98,28 @@ namespace CloudProperty.Controllers
             user.Cellphone = request.Cellphone;
             user.Name = request.Name;
             user.Password = passwordHash;
-            user.CreatedAt = DateTime.UtcNow;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.CreatedAt = request.CreatedAt;
+            user.UpdatedAt = request.UpdatedAt;
             try
             {
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
-                return Ok(user);
+
+                // send welcome email...
+                SendEmailDTO sendEmailDto = new SendEmailDTO();
+                sendEmailDto.ToEmail = user.Email;
+                sendEmailDto.Subject = "Welcome to cloudproperty";
+                sendEmailDto.Body = "Dear Client. Welcome to the best rental property management community. attached is your welcome guide.";
+
+                bool sent = await _communicationService.SendEmailAsync(sendEmailDto);
+                if (!sent) { 
+                    // log here that email failed to sent....
+                }
+
+
+
+
+                return Ok(await _userService.GetUserById(user.Id));
             }
             catch (Exception ex) {
                 return BadRequest(ex.Message);
@@ -102,9 +127,9 @@ namespace CloudProperty.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult<string>> Login(User request) {
+        public async Task<ActionResult<string>> Login(UserDTO request) {
 
-            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
             if (user == null)
             {
@@ -126,7 +151,7 @@ namespace CloudProperty.Controllers
         public async Task<ActionResult<User>> RefreshToken() 
         {
             var refreshToken = Request.Cookies["refreshToken"];
-            user = await _context.Users.Where(
+            var user = await _context.Users.Where(
                 u => u.RefreshToken == refreshToken && u.RefreshTokenExpiresAt > DateTime.UtcNow
             ).FirstOrDefaultAsync();
             
@@ -140,16 +165,17 @@ namespace CloudProperty.Controllers
         }
 
         [HttpPost("request-password-reset")]
-        public async Task<ActionResult<string>> RequestPasswordReset(User request)
+        public async Task<ActionResult<string>> RequestPasswordReset(UserDTO request)
         {
-            user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
             if (user != null)
             {
+                var lookupToken = new LookupToken();
                 lookupToken.Action = "password-reset";
                 lookupToken.ModelName = "User";
                 lookupToken.ModelData = user.Id.ToString();
-                lookupToken = await lookupToken.CreateLookupToken(lookupToken);
+                lookupToken = await _lookupTokenService.CreateLookupToken(lookupToken);
 
                 string host = _configuration.GetSection("AppSettings:baseUrl").Value.ToString();
                 string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
@@ -160,7 +186,7 @@ namespace CloudProperty.Controllers
         }
 
         [HttpPost("reset-password")]
-        public async Task<ActionResult<string>> ResetPassword(User request) {
+        public async Task<ActionResult<string>> ResetPassword(UserDTO request) {
 
             if (String.IsNullOrEmpty(request.Password))
             {
@@ -168,17 +194,18 @@ namespace CloudProperty.Controllers
             }
 
             string token = Request.Query["uid"].ToString();
-            lookupToken = await _context.LookupTokens.Where(t => t.Token == token && t.ExpiresAt < DateTime.UtcNow ).FirstOrDefaultAsync();
+            var lookupToken = await _context.LookupTokens.Where(t => t.Token == token && t.ExpiresAt > DateTime.UtcNow ).FirstOrDefaultAsync();
 
             if (lookupToken == null) { return BadRequest("Invalid or expired password reset url"); }
 
-            user = await user.GetUserById(Convert.ToInt32(lookupToken.ModelData));
+            userDto = await _userService.GetUserById(Convert.ToInt32(lookupToken.ModelData));
 
-            if (user == null)
+            if (userDto == null)
             {
                 return BadRequest("Password reset failed");
             }
 
+            var user = await _context.Users.FindAsync(userDto.Id);
             CreatePasswordHash(request.Password, out string passwordHash);
             user.Password = passwordHash;
             user.RefreshToken = null;
@@ -188,7 +215,7 @@ namespace CloudProperty.Controllers
             try
             {
                 await _context.SaveChangesAsync();
-                return Ok( await user.GetUserById(user.Id) );
+                return Ok( await _userService.GetUserById(user.Id) );
             }
             catch (Exception ex)
             {

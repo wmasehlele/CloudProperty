@@ -10,13 +10,13 @@ namespace CloudProperty.Controllers
     [ApiController, Authorize]
     public class FileStorageController : AppController
     {
-        private readonly BlobStorage blobStorage;
-        public FileStorageController(BlobStorage blobStorage) {
-            this.blobStorage = blobStorage;
+        private readonly FileStorageService _fileStorageService;
+        public FileStorageController(FileStorageService fileStorageService) {
+            _fileStorageService = fileStorageService;
         }
 
         [HttpPost("uploadfiles")]
-        public async Task<ActionResult<List<FileStorage>>> UploadFiles(List<IFormFile> files, IFormCollection fileForm) {
+        public async Task<ActionResult<List<FileStorageDTO>>> UploadFiles(List<IFormFile> files, IFormCollection fileForm) {
 
             if (files.Count == 0) { return BadRequest("No files uploaded"); }
 
@@ -24,22 +24,22 @@ namespace CloudProperty.Controllers
                 return BadRequest("Missing file upload details");
             }
             
-            List<FileStorage> uploadedFiles = new List<FileStorage>();
+            List<FileStorageDTO> uploadedFiles = new List<FileStorageDTO>();
             var bolbUrl = string.Empty;
             foreach (var file in files) {
 
-                if (!this.blobStorage.VerifyFileExtension(file.FileName)) { return BadRequest("Invalid file uploaded"); }
+                if (!_fileStorageService.VerifyFileExtension(file.FileName)) { return BadRequest("Invalid file uploaded"); }
                 
                 FileStorage fileStorage = new FileStorage();
                 fileStorage.FileName = DateTime.UtcNow.ToString("yyyymmddHHss") + AuthUserID.ToString() + Path.GetExtension(file.FileName);
                 fileStorage.Description = fileForm["Description"];
                 fileStorage.Type = fileForm["Type"];
                 fileStorage.ModelName = fileForm["ModelName"];
-                fileStorage.ModelId = fileForm["ModelId"];
+                fileStorage.ModelId = Convert.ToInt32(fileForm["ModelId"]);
 
-                fileStorage = await this.blobStorage.UploadFile(file, fileStorage);
-                //bolbUrl = this.blobStorage.GetBlobUrl(fileStorage.FileName);
-                uploadedFiles.Add(fileStorage);
+                var fileStorageDto = await _fileStorageService.UploadFile(file, fileStorage);
+                //bolbUrl = this.fileStorageService.GetBlobUrl(fileStorage.FileName);
+                uploadedFiles.Add(fileStorageDto);
             }
             return Ok(uploadedFiles);
         }

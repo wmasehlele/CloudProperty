@@ -1,6 +1,8 @@
-﻿namespace CloudProperty
+﻿using CloudProperty.Models;
+
+namespace CloudProperty
 {
-    public class Category
+    public class Category : AppModel
     {
         public int Id { get; set; }
         public string Description { get; set; } = string.Empty;

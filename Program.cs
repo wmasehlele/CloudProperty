@@ -35,8 +35,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     };
 });
 
-builder.Services.AddTransient<DataCache>();
-builder.Services.AddTransient<BlobStorage>();
+builder.Services.Configure<MailSettingsService>(builder.Configuration.GetSection("MailSettings"));
+
+builder.Services.AddTransient<UserService>();
+builder.Services.AddTransient<DataCacheService>();
+builder.Services.AddTransient<FileStorageService>();
+builder.Services.AddTransient<LookupTokenService>();
+builder.Services.AddTransient<CommunicationService>();
 
 var app = builder.Build();
 

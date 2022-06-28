@@ -5,7 +5,7 @@ using CloudProperty.Models;
 
 namespace CloudProperty.Sevices
 {
-    public class BlobStorage
+    public class FileStorageService
     {
         private readonly IConfiguration configuration;
         private readonly IWebHostEnvironment webHostEnvironment;
@@ -29,7 +29,7 @@ namespace CloudProperty.Sevices
             ".jpeg"
         };
 
-        public BlobStorage(DatabaseContext context, IConfiguration configuration, IWebHostEnvironment webHostEnvironment)
+        public FileStorageService(DatabaseContext context, IConfiguration configuration, IWebHostEnvironment webHostEnvironment)
         {
             this.configuration = configuration;
             this.webHostEnvironment = webHostEnvironment;
@@ -56,7 +56,7 @@ namespace CloudProperty.Sevices
             return false;
         }
 
-        public async Task<FileStorage> UploadFile (IFormFile file, FileStorage fileStorage) {
+        public async Task<FileStorageDTO> UploadFile (IFormFile file, FileStorage fileStorage) {
             
             if (file == null) { return null; }
 
@@ -77,12 +77,33 @@ namespace CloudProperty.Sevices
                 File.Delete(filePath);
             }
 
-            return fileStorage;
+            return await GetFileById(fileStorage.Id);            
         }
 
         public string GetBlobUrl(string blobName)
         {
             return this.blobContainerClient.GetBlobClient(blobName).GenerateSasUri(BlobSasPermissions.Read, DateTime.UtcNow.AddDays(1)).AbsoluteUri;
+        }
+
+        public async Task<FileStorageDTO> GetFileById(int Id) {
+            var fileStorageDto = new FileStorageDTO();
+            fileStorageDto = await this.context.Blobs
+                    .Where(f => f.Id == Id && f.Active == 1).Select(file => new FileStorageDTO()
+                    {
+                        Id = file.Id,
+                        FileName = file.FileName,
+                        Description = file.Description,
+                        Type = file.Type,
+                        ModelName = file.ModelName,
+                        ModelId = file.ModelId,
+                        Active = file.Active,
+                        CreatedAt = file.CreatedAt,
+                        UpdatedAt = file.UpdatedAt
+                    }).FirstOrDefaultAsync();
+
+            fileStorageDto.FileUrl = GetBlobUrl(fileStorageDto.FileName);
+
+            return fileStorageDto;
         }
     }
 }

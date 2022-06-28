@@ -1,6 +1,4 @@
 ﻿using CloudProperty.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 
 namespace CloudProperty
 {
@@ -11,5 +9,6 @@ namespace CloudProperty
         public DbSet<LookupToken> LookupTokens { get; set; }
         public DbSet<Category> Categories { get; set; }
         public DbSet<FileStorage> Blobs { get; set; }
+        public DbSet<Communication> Communications { get; set; }
     }
 }

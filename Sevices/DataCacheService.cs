@@ -2,11 +2,11 @@
 
 namespace CloudProperty.Data
 {
-    public class DataCache
+    public class DataCacheService
     {
         private readonly IDistributedCache distributedCache;
 
-        public DataCache (IDistributedCache distributedCache)
+        public DataCacheService (IDistributedCache distributedCache)
         {           
             this.distributedCache = distributedCache;
         }
