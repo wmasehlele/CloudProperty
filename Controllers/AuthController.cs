@@ -13,7 +13,6 @@ namespace CloudProperty.Controllers
         private CommunicationService _communicationService;
         private TemplateService _templateService;
 
-        private LookupTokenDTO lookupTokenDto;
         private UserDTO userDto;
        
         public AuthController(
@@ -35,7 +34,6 @@ namespace CloudProperty.Controllers
             _templateService = templateService;
 
             userDto = new UserDTO();
-            lookupTokenDto = new LookupTokenDTO();
         }
 
         [HttpGet("get-users"), Authorize]
