@@ -125,37 +125,22 @@ namespace CloudProperty.Sevices
 
 			if (sendSmsDto.smsRecipients.Count == 0) { return false; }
 
-			//string[] recipients = new string[sendSmsDto.smsRecipients.Count];
-			//int index = 0;
-
-			//foreach (var recipient in sendSmsDto.smsRecipients)
-			//{
-			//	if (sendSmsDto.smsRecipients.Count > 1)
-			//	{
-			//		recipients[index] = recipients + "," + recipient.Cellphone;
-			//	}
-			//	else
-			//	{
-			//		recipients[index] = recipient.Cellphone;
-			//	}
-			//	index++;
-			//}
-
-			List<ClickaTellMessage> messagesToSend = new List<ClickaTellMessage>();
+			List<ClickaTellMessage> messages = new List<ClickaTellMessage>();
 			foreach (var recipient in sendSmsDto.smsRecipients)
 			{
-				var message = new ClickaTellMessage();
-				message.channel = "sms";
-				message.content = sendSmsDto.Message;
-				message.to = recipient.Cellphone;
-				messagesToSend.Add(message);
+				var clickaTellMessage = new ClickaTellMessage();
+				clickaTellMessage.channel = "sms";
+				clickaTellMessage.content = sendSmsDto.Message;
+				clickaTellMessage.to = "27" + recipient.Cellphone.Substring(1);
+				messages.Add(clickaTellMessage);
 			}
-
+			Dictionary<string, List<ClickaTellMessage>> data = new Dictionary<string, List<ClickaTellMessage>>();
+			data.Add("messages", messages);
 			var httpClient = _httpClientFactory.CreateClient("ClickaTell");
 			var options = new JsonSerializerOptions { WriteIndented = true };
-			var messages = JsonSerializer.Serialize(messagesToSend, options);
+			var textMessages = JsonSerializer.Serialize(data, options);
 			var jsonMessages = new StringContent(
-				messages,
+				JsonSerializer.Serialize(data, options),
 				Encoding.UTF8,
 				Application.Json
 			);

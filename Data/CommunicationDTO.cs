@@ -56,7 +56,8 @@
 		public string channel { get; set; }
 		public string content { get; set; }
 		public string to { get; set; }
-		public List<ClickaTellMessage> messages { get; set; }
+
+		//public List<ClickaTellMessage> messages { get; set; }
 		//public string From { get; set; }
 		//public bool Binary { get; set; }
 		//public string ClientMessageId { get; set; }
