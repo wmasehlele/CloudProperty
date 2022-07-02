@@ -5,9 +5,17 @@ using CloudProperty.Sevices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
+using NLog;
+using NLog.Web;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var logger = LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
+logger.Debug("init main");
+
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
 
 // Add services to the container.
 builder.Services.AddHttpClient();
@@ -47,6 +55,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 
 builder.Services.Configure<MailSettingsService>(builder.Configuration.GetSection("MailSettings"));
 
+builder.Services.AddTransient<LoggerService>();
+builder.Services.AddTransient<ExceptionMiddleware>();
 builder.Services.AddTransient<UserService>();
 builder.Services.AddTransient<DataCacheService>();
 builder.Services.AddTransient<FileStorageService>();
@@ -56,14 +66,9 @@ builder.Services.AddTransient<TemplateService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-
 app.UseHttpsRedirection();
-
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
-
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

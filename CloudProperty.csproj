@@ -20,10 +20,13 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Redis" Version="2.2.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="6.0.6" />
     <PackageReference Include="MimeKit" Version="3.3.0" />
+    <PackageReference Include="NLog" Version="5.0.1" />
+    <PackageReference Include="NLog.Web.AspNetCore" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="storage\" />
+    <Folder Include="Templates\Documents\" />
   </ItemGroup>
 
 </Project>

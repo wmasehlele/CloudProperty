@@ -9,6 +9,7 @@ namespace CloudProperty.Controllers
 	[ApiController]
 	public class AuthController : AppController
 	{
+		private readonly ILogger<AuthController> _logger;
 		private LookupTokenService _lookupTokenService;
 		private CommunicationService _communicationService;
 		private TemplateService _templateService;
@@ -16,6 +17,7 @@ namespace CloudProperty.Controllers
 		private UserDTO userDto;
 
 		public AuthController(
+			ILogger<AuthController> logger,
 			DatabaseContext context,
 			IConfiguration configuration,
 			DataCacheService dataCacheService,
@@ -24,7 +26,7 @@ namespace CloudProperty.Controllers
 			CommunicationService communicationService,
 			TemplateService templateService)
 		{
-
+			_logger = logger;
 			_context = context;
 			_configuration = configuration;
 			_dataCacheService = dataCacheService;
@@ -49,8 +51,11 @@ namespace CloudProperty.Controllers
 			userDto = await _userService.GetUserById(AuthUserID);
 			if (userDto == null) { return Unauthorized(); }
 
+			_logger.LogError("Application with error");
+
 			int otp = GenerateOtp(10, 5);
 			string cacheKey = userDto.Id.ToString() + "-contact-verification";
+
 			_dataCacheService.SetCacheValue(cacheKey, otp.ToString());
 
 			if (contactType == "email")
@@ -103,7 +108,8 @@ namespace CloudProperty.Controllers
 			int opt = Convert.ToInt32(await _dataCacheService.GetCachedValue(cacheKey));
 			if (userOtp != opt)
 			{
-				return BadRequest("Invalid or expired Otp");
+				throw new Exception("Invalid or expired Otp");
+				//return BadRequest("Invalid or expired Otp");
 			}
 
 			var user = await _context.Users.FindAsync(AuthUserID);
