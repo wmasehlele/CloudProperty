@@ -4,35 +4,45 @@ using CloudProperty;
 using CloudProperty.Sevices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ClickaTell", httpClient =>
+{
+	httpClient.BaseAddress = new Uri("https://platform.clickatell.com/");
+	httpClient.DefaultRequestHeaders.TryAddWithoutValidation(HeaderNames.Accept, "application/json");
+	httpClient.DefaultRequestHeaders.TryAddWithoutValidation(HeaderNames.Authorization, builder.Configuration.GetSection("ClickatellSettings:Key").Value);
+});
+
 
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<DatabaseContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+	options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
-builder.Services.AddDistributedRedisCache(options =>
-{    
-    options.Configuration = builder.Configuration.GetConnectionString("CacheConnection");
-    options.InstanceName = "master";
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+	options.Configuration = builder.Configuration.GetConnectionString("CacheConnection");
+	options.InstanceName = "master";
+
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8
-        .GetBytes(builder.Configuration.GetSection("AppSettings:secrete").Value)),
-        ValidateIssuer = false,
-        ValidateAudience = false  
-    };
+	options.TokenValidationParameters = new TokenValidationParameters
+	{
+		ValidateIssuerSigningKey = true,
+		IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8
+		.GetBytes(builder.Configuration.GetSection("AppSettings:secrete").Value)),
+		ValidateIssuer = false,
+		ValidateAudience = false
+	};
 });
 
 builder.Services.Configure<MailSettingsService>(builder.Configuration.GetSection("MailSettings"));

@@ -1,286 +1,307 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using CloudProperty.Models;
-using Microsoft.AspNetCore.Authorization;
+﻿using CloudProperty.Models;
 using CloudProperty.Sevices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CloudProperty.Controllers
 {
-    [Route("api/auth")]
-    [ApiController]
-    public class AuthController : AppController
-    {
-        private LookupTokenService _lookupTokenService;
-        private CommunicationService _communicationService;
-        private TemplateService _templateService;
+	[Route("api/auth")]
+	[ApiController]
+	public class AuthController : AppController
+	{
+		private LookupTokenService _lookupTokenService;
+		private CommunicationService _communicationService;
+		private TemplateService _templateService;
 
-        private UserDTO userDto;
-       
-        public AuthController(
-            DatabaseContext context, 
-            IConfiguration configuration, 
-            DataCacheService dataCacheService, 
-            UserService userService, 
-            LookupTokenService lookupTokenService,
-            CommunicationService communicationService,
-            TemplateService templateService) 
-        {
-            
-            _context = context;
-            _configuration = configuration;
-            _dataCacheService = dataCacheService;
-            _userService = userService;
-            _lookupTokenService = lookupTokenService;
-            _communicationService = communicationService;
-            _templateService = templateService;
+		private UserDTO userDto;
 
-            userDto = new UserDTO();
-        }
+		public AuthController(
+			DatabaseContext context,
+			IConfiguration configuration,
+			DataCacheService dataCacheService,
+			UserService userService,
+			LookupTokenService lookupTokenService,
+			CommunicationService communicationService,
+			TemplateService templateService)
+		{
 
-        [HttpGet("get-users"), Authorize]
-        public async Task<ActionResult<List<UserDTO>>> GetUsers() 
-        {            
-            return Ok(await _userService.GetAllUsers());
-        }
+			_context = context;
+			_configuration = configuration;
+			_dataCacheService = dataCacheService;
+			_userService = userService;
+			_lookupTokenService = lookupTokenService;
+			_communicationService = communicationService;
+			_templateService = templateService;
 
-        [HttpGet("request-contact-verification"), Authorize]
-        public async Task<ActionResult<string>> RequestContactVerification()
-        {
-            string contactType = Request.Query["contactType"].ToString();
-            userDto = await _userService.GetUserById(AuthUserID);
-            if (userDto == null) { return Unauthorized(); }
+			userDto = new UserDTO();
+		}
 
-            int otp = GenerateOtp(10,5);
-            string cacheKey = userDto.Id.ToString() + "-contact-verification";
-            _dataCacheService.SetCacheValue(cacheKey, otp.ToString());
+		[HttpGet("get-users"), Authorize]
+		public async Task<ActionResult<List<UserDTO>>> GetUsers()
+		{
+			return Ok(await _userService.GetAllUsers());
+		}
 
-            if (contactType == "email")
-            {
-                // email the otp
-                SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.emailRecipients = new List<EmailRecipient> {
-                    new EmailRecipient(userDto.Email, userDto.Name)
-                };
-                sendEmailDto.Subject = "Email verification code";
-                int templateId = 2;
-                sendEmailDto.Body = await _templateService.GetEmailVerificationMailTemplate(templateId, userDto, otp);
+		[HttpGet("request-contact-verification"), Authorize]
+		public async Task<ActionResult<string>> RequestContactVerification()
+		{
+			string contactType = Request.Query["contactType"].ToString();
+			userDto = await _userService.GetUserById(AuthUserID);
+			if (userDto == null) { return Unauthorized(); }
 
-                bool sent = await _communicationService.SendEmail(sendEmailDto);
-                if (!sent) { 
-                    // do something
-                }
-            }
+			int otp = GenerateOtp(10, 5);
+			string cacheKey = userDto.Id.ToString() + "-contact-verification";
+			_dataCacheService.SetCacheValue(cacheKey, otp.ToString());
 
-            if (contactType == "cellphone")
-            {
-                // sms the opt
-            }
-            return Ok(await _dataCacheService.GetCachedValue(cacheKey));
-        }
+			if (contactType == "email")
+			{
+				// email the otp
+				SendEmailDTO sendEmailDto = new SendEmailDTO();
+				sendEmailDto.emailRecipients = new List<EmailRecipient> {
+					new EmailRecipient(userDto.Email, userDto.Name)
+				};
+				sendEmailDto.Subject = "Email verification code";
+				int templateId = 2;
+				sendEmailDto.Body = await _templateService.GetEmailVerificationMailTemplate(templateId, userDto, otp);
 
-        [HttpGet("contact-verification/{userOtp}"), Authorize]
-        public async Task<ActionResult<string>> ContactVerification(int userOtp)
-        {
-            string contactType = Request.Query["contactType"].ToString();
+				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				if (!sent)
+				{
+					// do something
+				}
+			}
 
-            userDto = await _userService.GetUserById(AuthUserID);
-            if (userDto == null) { return Unauthorized(); }
-            string cacheKey = userDto.Id.ToString() + "-contact-verification";
+			if (contactType == "cellphone")
+			{
+				// sms the opt
+				SendSmsDTO sendSmsDto = new SendSmsDTO();
+				sendSmsDto.smsRecipients = new List<SmsRecipient> {
+					new SmsRecipient(userDto.Cellphone, userDto.Name)
+				};
+				var smsTemplate = await _context.Templates.FindAsync(5); // Cellphone verification
+				sendSmsDto.Subject = "Cellphone verification code";
+				sendSmsDto.Message = string.Format(smsTemplate.Content, otp);
 
-            int opt = Convert.ToInt32(await _dataCacheService.GetCachedValue(cacheKey));
-            if (userOtp != opt) {
-                return BadRequest("Invalid or expired Otp");
-            }
+				bool sent = await _communicationService.SendSms(sendSmsDto, AuthUserID);
+				if (!sent)
+				{
+					// do something
+				}
+			}
+			return Ok(await _dataCacheService.GetCachedValue(cacheKey));
+		}
 
-            var user = await _context.Users.FindAsync(AuthUserID);
-            if (contactType == "email")
-            {
-                user.EmailVerifiedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-            } 
-            
-            if (contactType == "cellphone")
-            {
-                user.CellphoneVerifiedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-            }
+		[HttpGet("contact-verification/{userOtp}"), Authorize]
+		public async Task<ActionResult<string>> ContactVerification(int userOtp)
+		{
+			string contactType = Request.Query["contactType"].ToString();
 
-            return Ok(opt);
-        }
+			userDto = await _userService.GetUserById(AuthUserID);
+			if (userDto == null) { return Unauthorized(); }
+			string cacheKey = userDto.Id.ToString() + "-contact-verification";
 
-        [HttpPost("register")]
-        public async Task<ActionResult<UserDTO>> Register(UserDTO request) {
+			int opt = Convert.ToInt32(await _dataCacheService.GetCachedValue(cacheKey));
+			if (userOtp != opt)
+			{
+				return BadRequest("Invalid or expired Otp");
+			}
 
-            if (String.IsNullOrEmpty(request.Password) || String.IsNullOrEmpty(request.Email)) 
-            {
-                return BadRequest("Missing information for user registration");
-            }
+			var user = await _context.Users.FindAsync(AuthUserID);
+			if (contactType == "email")
+			{
+				user.EmailVerifiedAt = DateTime.UtcNow;
+				await _context.SaveChangesAsync();
+			}
 
-            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
-            if (user != null)
-            {
-                return BadRequest("User already exists");
-            }
+			if (contactType == "cellphone")
+			{
+				user.CellphoneVerifiedAt = DateTime.UtcNow;
+				await _context.SaveChangesAsync();
+			}
 
-            user = new User();
-            CreatePasswordHash(request.Password, out string passwordHash);            
-            user.Email = request.Email;
-            user.Cellphone = request.Cellphone;
-            user.Name = request.Name;
-            user.Password = passwordHash;
-            user.CreatedAt = request.CreatedAt;
-            user.UpdatedAt = request.UpdatedAt;
-            try
-            {
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
+			return Ok(opt);
+		}
 
-                // send welcome email...                
-                SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.emailRecipients = new List<EmailRecipient> {
-                    new EmailRecipient(user.Email, user.Name)
-                };
-                sendEmailDto.Subject = "Welcome to cloudproperty";
-                int templateId = 1;
-                sendEmailDto.Body = await _templateService.GetWelcomeMailTemplate(templateId, request);
+		[HttpPost("register")]
+		public async Task<ActionResult<UserDTO>> Register(UserDTO request)
+		{
 
-                bool sent = await _communicationService.SendEmail(sendEmailDto);
-                if (!sent) { 
-                    // log here that email failed to sent....
-                }
+			if (String.IsNullOrEmpty(request.Password) || String.IsNullOrEmpty(request.Email))
+			{
+				return BadRequest("Missing information for user registration");
+			}
 
-                return Ok(await _userService.GetUserById(user.Id));
-            }
-            catch (Exception ex) {
-                return BadRequest(ex.Message);
-            }
-        }
+			var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+			if (user != null)
+			{
+				return BadRequest("User already exists");
+			}
 
-        [HttpPost("login")]
-        public async Task<ActionResult<string>> Login(UserDTO request) {
+			user = new User();
+			CreatePasswordHash(request.Password, out string passwordHash);
+			user.Email = request.Email;
+			user.Cellphone = request.Cellphone;
+			user.Name = request.Name;
+			user.Password = passwordHash;
+			user.CreatedAt = request.CreatedAt;
+			user.UpdatedAt = request.UpdatedAt;
+			try
+			{
+				_context.Users.Add(user);
+				await _context.SaveChangesAsync();
 
-            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+				// send welcome email...                
+				SendEmailDTO sendEmailDto = new SendEmailDTO();
+				sendEmailDto.emailRecipients = new List<EmailRecipient> {
+					new EmailRecipient(user.Email, user.Name)
+				};
+				sendEmailDto.Subject = "Welcome to cloudproperty";
+				int templateId = 1;
+				sendEmailDto.Body = await _templateService.GetWelcomeMailTemplate(templateId, request);
 
-            if (user == null)
-            {
-                return BadRequest("Invalid credential");
-            }
+				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				if (!sent)
+				{
+					// log here that email failed to sent....
+				}
 
-            if ( (user.Email != request.Email) || !verifyPasswordHash(request.Password, user.Password))
-            {
-                return BadRequest("Invalid credentials");
-            }
-            string token = CreateToken(user);
-            var refreshToken = GenerateRefreshToken(user);
-            await SetRefreshToken(refreshToken, user);
-            user.RefreshToken = token;
-            return Ok(token);
-        }
+				return Ok(await _userService.GetUserById(user.Id));
+			}
+			catch (Exception ex)
+			{
+				return BadRequest(ex.Message);
+			}
+		}
 
-        [HttpPost("refresh-token")]
-        public async Task<ActionResult<User>> RefreshToken() 
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-            var user = await _context.Users.Where(
-                u => u.RefreshToken == refreshToken && u.RefreshTokenExpiresAt > DateTime.UtcNow
-            ).FirstOrDefaultAsync();
-            
-            if (user == null) {
-                return Unauthorized("Invalid or expired refresh token");
-            }
-            string token = CreateToken(user);
-            var newRefreshToken = GenerateRefreshToken(user);
-            await SetRefreshToken(newRefreshToken, user);            
-            return Ok(token);
-        }
+		[HttpPost("login")]
+		public async Task<ActionResult<string>> Login(UserDTO request)
+		{
 
-        [HttpPost("request-password-reset")]
-        public async Task<ActionResult<string>> RequestPasswordReset(UserDTO request)
-        {
-            var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
+			var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
-            if (user != null)
-            {
-                var lookupToken = new LookupToken();
-                lookupToken.Action = "password-reset";
-                lookupToken.ModelName = "User";
-                lookupToken.ModelData = user.Id.ToString();
-                lookupToken = await _lookupTokenService.CreateLookupToken(lookupToken);
+			if (user == null)
+			{
+				return BadRequest("Invalid credential");
+			}
 
-                string host = _configuration.GetSection("AppSettings:baseUrl").Value.ToString();
-                string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
-                // add function for emailing back to user.
+			if ((user.Email != request.Email) || !verifyPasswordHash(request.Password, user.Password))
+			{
+				return BadRequest("Invalid credentials");
+			}
+			string token = CreateToken(user);
+			var refreshToken = GenerateRefreshToken(user);
+			await SetRefreshToken(refreshToken, user);
+			user.RefreshToken = token;
+			return Ok(token);
+		}
 
-                // send welcome email...                
-                SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.emailRecipients = new List<EmailRecipient> {
-                    new EmailRecipient(user.Email, user.Name)
-                };
-                sendEmailDto.Subject = "Request for password rest";
-                int templateId = 3;
-                sendEmailDto.Body = await _templateService.GetPasswordResetMailTemplate(templateId, user, url);
+		[HttpPost("refresh-token")]
+		public async Task<ActionResult<User>> RefreshToken()
+		{
+			var refreshToken = Request.Cookies["refreshToken"];
+			var user = await _context.Users.Where(
+				u => u.RefreshToken == refreshToken && u.RefreshTokenExpiresAt > DateTime.UtcNow
+			).FirstOrDefaultAsync();
 
-                bool sent = await _communicationService.SendEmail(sendEmailDto);
-                if (!sent)
-                {
-                    // log here that email failed to sent....
-                }
-                return url;
-            }
-            return "";
-        }
+			if (user == null)
+			{
+				return Unauthorized("Invalid or expired refresh token");
+			}
+			string token = CreateToken(user);
+			var newRefreshToken = GenerateRefreshToken(user);
+			await SetRefreshToken(newRefreshToken, user);
+			return Ok(token);
+		}
 
-        [HttpPost("reset-password")]
-        public async Task<ActionResult<string>> ResetPassword(UserDTO request) {
+		[HttpPost("request-password-reset")]
+		public async Task<ActionResult<string>> RequestPasswordReset(UserDTO request)
+		{
+			var user = await _context.Users.Where(u => u.Email == request.Email).FirstOrDefaultAsync();
 
-            if (String.IsNullOrEmpty(request.Password))
-            {
-                return BadRequest("Missing information for password reset");
-            }
+			if (user != null)
+			{
+				var lookupToken = new LookupToken();
+				lookupToken.Action = "password-reset";
+				lookupToken.ModelName = "User";
+				lookupToken.ModelData = user.Id.ToString();
+				lookupToken = await _lookupTokenService.CreateLookupToken(lookupToken);
 
-            string token = Request.Query["uid"].ToString();
-            var lookupToken = await _context.LookupTokens.Where(t => t.Token == token && t.ExpiresAt > DateTime.UtcNow ).FirstOrDefaultAsync();
+				string host = _configuration.GetSection("AppSettings:baseUrl").Value.ToString();
+				string url = host + "api/auth/reset-password?uid=" + lookupToken.Token.ToString();
+				// add function for emailing back to user.
 
-            if (lookupToken == null) { return BadRequest("Invalid or expired password reset url"); }
+				// send welcome email...                
+				SendEmailDTO sendEmailDto = new SendEmailDTO();
+				sendEmailDto.emailRecipients = new List<EmailRecipient> {
+					new EmailRecipient(user.Email, user.Name)
+				};
+				sendEmailDto.Subject = "Request for password rest";
+				int templateId = 3;
+				sendEmailDto.Body = await _templateService.GetPasswordResetMailTemplate(templateId, user, url);
 
-            userDto = await _userService.GetUserById(Convert.ToInt32(lookupToken.ModelData));
+				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				if (!sent)
+				{
+					// log here that email failed to sent....
+				}
+				return url;
+			}
+			return "";
+		}
 
-            if (userDto == null)
-            {
-                return BadRequest("Password reset failed");
-            }
+		[HttpPost("reset-password")]
+		public async Task<ActionResult<string>> ResetPassword(UserDTO request)
+		{
 
-            var user = await _context.Users.FindAsync(userDto.Id);
-            CreatePasswordHash(request.Password, out string passwordHash);
-            user.Password = passwordHash;
-            user.RefreshToken = null;
-            user.RefreshTokenCreatedAt = null;
-            user.RefreshTokenExpiresAt = null;
-            user.UpdatedAt = DateTime.UtcNow;
-            try
-            {
-                await _context.SaveChangesAsync();
+			if (String.IsNullOrEmpty(request.Password))
+			{
+				return BadRequest("Missing information for password reset");
+			}
 
-                // send welcome email...                
-                SendEmailDTO sendEmailDto = new SendEmailDTO();
-                sendEmailDto.emailRecipients = new List<EmailRecipient> {
-                    new EmailRecipient(user.Email, user.Name)
-                };
-                sendEmailDto.Subject = "Password updated";
-                int templateId = 4;
-                sendEmailDto.Body = await _templateService.GetPasswordUpdatedMailTemplate(templateId, user);
+			string token = Request.Query["uid"].ToString();
+			var lookupToken = await _context.LookupTokens.Where(t => t.Token == token && t.ExpiresAt > DateTime.UtcNow).FirstOrDefaultAsync();
 
-                bool sent = await _communicationService.SendEmail(sendEmailDto);
-                if (!sent)
-                {
-                    // log here that email failed to sent....
-                }
+			if (lookupToken == null) { return BadRequest("Invalid or expired password reset url"); }
 
-                return Ok( await _userService.GetUserById(user.Id) );
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
-    }
+			userDto = await _userService.GetUserById(Convert.ToInt32(lookupToken.ModelData));
+
+			if (userDto == null)
+			{
+				return BadRequest("Password reset failed");
+			}
+
+			var user = await _context.Users.FindAsync(userDto.Id);
+			CreatePasswordHash(request.Password, out string passwordHash);
+			user.Password = passwordHash;
+			user.RefreshToken = null;
+			user.RefreshTokenCreatedAt = null;
+			user.RefreshTokenExpiresAt = null;
+			user.UpdatedAt = DateTime.UtcNow;
+			try
+			{
+				await _context.SaveChangesAsync();
+
+				// send welcome email...                
+				SendEmailDTO sendEmailDto = new SendEmailDTO();
+				sendEmailDto.emailRecipients = new List<EmailRecipient> {
+					new EmailRecipient(user.Email, user.Name)
+				};
+				sendEmailDto.Subject = "Password updated";
+				int templateId = 4;
+				sendEmailDto.Body = await _templateService.GetPasswordUpdatedMailTemplate(templateId, user);
+
+				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				if (!sent)
+				{
+					// log here that email failed to sent....
+				}
+
+				return Ok(await _userService.GetUserById(user.Id));
+			}
+			catch (Exception ex)
+			{
+				return BadRequest(ex.Message);
+			}
+		}
+	}
 }

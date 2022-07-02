@@ -1,100 +1,209 @@
 ﻿using CloudProperty.Models;
-using MailKit;
 using MailKit.Net.Smtp;
-using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using System.Text;
+using System.Text.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace CloudProperty.Sevices
 {
-    public class CommunicationService
-    {
 
-        private readonly DatabaseContext _context;
-        private readonly MailSettingsService _mailSettingsService;
-        private readonly TemplateService _templateService;
+	public class CommunicationService
+	{
 
-        public CommunicationService(DatabaseContext context, IOptions<MailSettingsService> mailSettings, TemplateService templateService)
-        {
-            _context = context;
-            _mailSettingsService = mailSettings.Value;
-            _templateService = templateService;
-        }
+		private readonly DatabaseContext _context;
+		private readonly MailSettingsService _mailSettingsService;
+		private readonly UserService _userService;
+		private readonly IHttpClientFactory _httpClientFactory;
 
-        public async Task<bool> SendEmail(SendEmailDTO sendEmailDto)
-        {
-            var email = new MimeMessage();
-            email.From.Add(new MailboxAddress(_mailSettingsService.DisplayName, _mailSettingsService.Mail));
+		public CommunicationService(
+			DatabaseContext context,
+			IOptions<MailSettingsService> mailSettings,
+			UserService userService,
+			IHttpClientFactory httpClientFactory)
+		{
+			_context = context;
+			_mailSettingsService = mailSettings.Value;
+			_userService = userService;
+			_httpClientFactory = httpClientFactory;
 
-            if (sendEmailDto.emailRecipients.Count == 0) { return false; }
+		}
 
-            foreach (var recipient in sendEmailDto.emailRecipients)
-            {
-                if (sendEmailDto.emailRecipients.Count > 1)
-                {
-                    email.Bcc.Add(new MailboxAddress(recipient.Name, recipient.Email));
-                }
-                else
-                {
-                    email.To.Add(new MailboxAddress(recipient.Name, recipient.Email));
-                }
-            }
-            
-            email.Subject = sendEmailDto.Subject;
-            
-            var builder = new BodyBuilder();
-            if (sendEmailDto.Attachments != null)
-            {
-                byte[] fileBytes;
-                foreach (var file in sendEmailDto.Attachments)
-                {
-                    if (file.Length > 0)
-                    {
-                        using (var ms = new MemoryStream())
-                        {
-                            file.CopyTo(ms);
-                            fileBytes = ms.ToArray();
-                        }
-                        builder.Attachments.Add(file.FileName, fileBytes, ContentType.Parse(file.ContentType));
-                    }
-                }
-            }
+		public async Task<bool> SendEmail(SendEmailDTO sendEmailDto, int authUserId = 0)
+		{
 
-            builder.HtmlBody = sendEmailDto.Body;
-            email.Body = builder.ToMessageBody();
+			var authUser = new UserDTO();
 
-            try
-            {
-                using (var smtp = new SmtpClient())
-                {
-                    smtp.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
-                    {
-                        return true;
-                    };
-                    smtp.Connect(_mailSettingsService.Host, _mailSettingsService.Port, true);
-                    smtp.Authenticate(_mailSettingsService.Mail, _mailSettingsService.Password);
-                    string severResponse = await smtp.SendAsync(email);
-                    smtp.Disconnect(true);
-                }
-                return true;
-            }
-            catch (Exception ex) {
-                return false;
-            }
-        }
+			if (authUserId > 0)
+			{
+				authUser = await _userService.GetUserById(authUserId);
+			}
 
-        public async Task<bool> CreateCommunication(Communication communicationDto) {
-            Communication communication = new Communication();
-            communication.Id = communicationDto.Id;
-            communication.Type = communicationDto.Type;
-            communication.Status = communicationDto.Status;
-            communication.MessageTrigger = communicationDto.MessageTrigger;
-            communication.SentBy = communicationDto.SentBy;
-            communication.CreatedAt = communicationDto.CreatedAt;
-            communication.UpdatedAt = communicationDto.UpdatedAt;
-            _context.Communications.Add(communication);
-            await _context.SaveChangesAsync();
-            return true;
-        }
-    }
+			// check env and set default recipient if on test or dev
+
+			var email = new MimeMessage();
+			email.From.Add(new MailboxAddress(_mailSettingsService.DisplayName, _mailSettingsService.Mail));
+
+			if (sendEmailDto.emailRecipients.Count == 0) { return false; }
+
+			foreach (var recipient in sendEmailDto.emailRecipients)
+			{
+				if (sendEmailDto.emailRecipients.Count > 1)
+				{
+					email.Bcc.Add(new MailboxAddress(recipient.Name, recipient.Email));
+				}
+				else
+				{
+					email.To.Add(new MailboxAddress(recipient.Name, recipient.Email));
+				}
+			}
+
+			email.Subject = sendEmailDto.Subject;
+
+			var builder = new BodyBuilder();
+			if (sendEmailDto.Attachments != null)
+			{
+				byte[] fileBytes;
+				foreach (var file in sendEmailDto.Attachments)
+				{
+					if (file.Length > 0)
+					{
+						using (var ms = new MemoryStream())
+						{
+							file.CopyTo(ms);
+							fileBytes = ms.ToArray();
+						}
+						builder.Attachments.Add(file.FileName, fileBytes, ContentType.Parse(file.ContentType));
+					}
+				}
+			}
+
+			builder.HtmlBody = sendEmailDto.Body;
+			email.Body = builder.ToMessageBody();
+
+			bool emailSent = false;
+			string severResponse = String.Empty;
+			using (var smtp = new SmtpClient())
+			{
+				smtp.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
+				{
+					return true;
+				};
+				smtp.Connect(_mailSettingsService.Host, _mailSettingsService.Port, true);
+				smtp.Authenticate(_mailSettingsService.Mail, _mailSettingsService.Password);
+				severResponse = await smtp.SendAsync(email);
+				smtp.Disconnect(true);
+
+				emailSent = true;
+			}
+
+			var communicationDto = new CommunicationDTO();
+			communicationDto.Type = "Email";
+			communicationDto.Status = emailSent ? "Sent" : "Failed";
+			communicationDto.MessageTrigger = sendEmailDto.Subject;
+			communicationDto.SentBy = authUser != null ? authUser.Id : 0;
+			communicationDto.ServerResponse = severResponse;
+			communicationDto.CreatedAt = DateTime.UtcNow;
+			communicationDto.UpdatedAt = DateTime.UtcNow;
+
+			await CreateCommunication(communicationDto);
+
+			return emailSent;
+		}
+
+		public async Task<bool> SendSms(SendSmsDTO sendSmsDto, int authUserId = 0)
+		{
+			var authUser = new UserDTO();
+
+			if (authUserId > 0)
+			{
+				authUser = await _userService.GetUserById(authUserId);
+			}
+
+			// check env and set default recipient if on test or dev
+
+			if (sendSmsDto.smsRecipients.Count == 0) { return false; }
+
+			//string[] recipients = new string[sendSmsDto.smsRecipients.Count];
+			//int index = 0;
+
+			//foreach (var recipient in sendSmsDto.smsRecipients)
+			//{
+			//	if (sendSmsDto.smsRecipients.Count > 1)
+			//	{
+			//		recipients[index] = recipients + "," + recipient.Cellphone;
+			//	}
+			//	else
+			//	{
+			//		recipients[index] = recipient.Cellphone;
+			//	}
+			//	index++;
+			//}
+
+			List<ClickaTellMessage> messagesToSend = new List<ClickaTellMessage>();
+			foreach (var recipient in sendSmsDto.smsRecipients)
+			{
+				var message = new ClickaTellMessage();
+				message.channel = "sms";
+				message.content = sendSmsDto.Message;
+				message.to = recipient.Cellphone;
+				messagesToSend.Add(message);
+			}
+
+			var httpClient = _httpClientFactory.CreateClient("ClickaTell");
+			var options = new JsonSerializerOptions { WriteIndented = true };
+			var messages = JsonSerializer.Serialize(messagesToSend, options);
+			var jsonMessages = new StringContent(
+				messages,
+				Encoding.UTF8,
+				Application.Json
+			);
+
+			var httpResponseMessage = await httpClient.PostAsync("v1/message", jsonMessages);
+			bool smsSent = httpResponseMessage.IsSuccessStatusCode;
+			string severResponse = string.Empty;
+			if (smsSent)
+			{
+				using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+			}
+
+
+
+			var communicationDto = new CommunicationDTO();
+			communicationDto.Type = "Sms";
+			communicationDto.Status = smsSent ? "Sent" : "Failed";
+			communicationDto.MessageTrigger = sendSmsDto.Subject;
+			communicationDto.SentBy = authUser != null ? authUser.Id : 0;
+			communicationDto.ServerResponse = severResponse;
+			communicationDto.CreatedAt = DateTime.UtcNow;
+			communicationDto.UpdatedAt = DateTime.UtcNow;
+
+			await CreateCommunication(communicationDto);
+
+			return smsSent;
+		}
+
+		public async Task<bool> CreateCommunication(CommunicationDTO communicationDto)
+		{
+
+			if (communicationDto == null)
+			{
+				return false;
+			}
+
+			Communication communication = new Communication();
+			communication.Type = communicationDto.Type;
+			communication.Status = communicationDto.Status;
+			communication.MessageTrigger = communicationDto.MessageTrigger;
+			communication.SentBy = communicationDto.SentBy;
+			communication.CreatedAt = communicationDto.CreatedAt;
+			communication.UpdatedAt = communicationDto.UpdatedAt;
+
+			_context.Communications.Add(communication);
+			await _context.SaveChangesAsync();
+
+			return true;
+		}
+	}
 }

@@ -2,67 +2,72 @@
 
 namespace CloudProperty.Sevices
 {
-    public class TemplateService
-    {
-        private readonly DatabaseContext _context;
-        private readonly MailSettingsService _mailSettingsService;
+	public class TemplateService
+	{
+		private readonly DatabaseContext _context;
+		private readonly MailSettingsService _mailSettingsService;
 
-        public TemplateService(DatabaseContext context)
-        {
-            _context = context;
-        }
+		public TemplateService(DatabaseContext context)
+		{
+			_context = context;
+		}
 
 
-        private async Task<string> GetEmailTemplate(int templateId) {
+		private async Task<string> GetEmailTemplate(int templateId)
+		{
 
-            var template = await _context.Templates.FindAsync(templateId);
+			var template = await _context.Templates.FindAsync(templateId);
 
-            if (template == null) { return string.Empty; }
+			if (template == null) { return string.Empty; }
 
-            string FilePath = Directory.GetCurrentDirectory() + "\\Emails\\";// MainTemplate.html";
+			string FilePath = Directory.GetCurrentDirectory() + "\\Emails\\";// MainTemplate.html";
 
-            string mainTemplate = File.ReadAllText(FilePath + "MainTemplate.html");
-            string mailTemplate = File.ReadAllText(FilePath + template.FileName);
-            mainTemplate = string.Format(mainTemplate, mailTemplate);
+			string mainTemplate = File.ReadAllText(FilePath + "MainTemplate.html");
+			string mailTemplate = File.ReadAllText(FilePath + template.Content);
+			mainTemplate = string.Format(mainTemplate, mailTemplate);
 
-            return mainTemplate;
-        }
+			return mainTemplate;
+		}
 
-        public async Task<string> GetWelcomeMailTemplate(int templateId, UserDTO userDto) {
+		public async Task<string> GetWelcomeMailTemplate(int templateId, UserDTO userDto)
+		{
 
-            string template = await GetEmailTemplate(templateId);
+			string template = await GetEmailTemplate(templateId);
 
-            string emailBody = string.Format(template, userDto.Name);
+			string emailBody = string.Format(template, userDto.Name);
 
-            return emailBody;
-        }
+			return emailBody;
+		}
 
-        public async Task<string> GetEmailVerificationMailTemplate(int templateId, UserDTO userDto, int otp) {
+		public async Task<string> GetEmailVerificationMailTemplate(int templateId, UserDTO userDto, int otp)
+		{
 
-            string template = await GetEmailTemplate(templateId);
+			string template = await GetEmailTemplate(templateId);
 
-            string emailBody = string.Format(template, userDto.Name, otp.ToString());
+			string emailBody = string.Format(template, userDto.Name, otp.ToString());
 
-            return emailBody;
-        }
+			return emailBody;
+		}
 
-        public async Task<string> GetPasswordResetMailTemplate(int templateId, User user, string url) {
-            
-            string template = await GetEmailTemplate(templateId);
+		public async Task<string> GetPasswordResetMailTemplate(int templateId, User user, string url)
+		{
 
-            string emailBody = string.Format(template, user.Name, url, url);
+			string template = await GetEmailTemplate(templateId);
 
-            return emailBody;
+			string emailBody = string.Format(template, user.Name, url, url);
 
-        }
+			return emailBody;
 
-        public async Task<string> GetPasswordUpdatedMailTemplate(int templateId, User user) {
+		}
 
-            string template = await GetEmailTemplate(templateId);
+		public async Task<string> GetPasswordUpdatedMailTemplate(int templateId, User user)
+		{
 
-            string emailBody = string.Format(template, user.Name);
+			string template = await GetEmailTemplate(templateId);
 
-            return emailBody;
-        }
-    }
+			string emailBody = string.Format(template, user.Name);
+
+			return emailBody;
+		}
+	}
 }
