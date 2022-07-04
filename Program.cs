@@ -12,7 +12,7 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 var logger = LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
-logger.Debug("init main");
+logger.Info("Application init");
 
 builder.Logging.ClearProviders();
 builder.Host.UseNLog();
@@ -65,6 +65,11 @@ builder.Services.AddTransient<CommunicationService>();
 builder.Services.AddTransient<TemplateService>();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+	logger.Info($"App running on environment: {app.Environment.EnvironmentName}");
+}
 
 app.UseHttpsRedirection();
 app.UseMiddleware<ExceptionMiddleware>();
