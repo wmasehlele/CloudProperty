@@ -63,7 +63,7 @@ namespace CloudProperty.Controllers
 				// email the otp
 				SendEmailDTO sendEmailDto = new SendEmailDTO();
 				sendEmailDto.emailRecipients = new List<EmailRecipient> {
-					new EmailRecipient(userDto.Email, userDto.Name)
+					new EmailRecipient(userDto.Email, userDto.GetUserFullname())
 				};
 				sendEmailDto.Subject = "Email verification code";
 				int templateId = 2;
@@ -81,7 +81,7 @@ namespace CloudProperty.Controllers
 				// sms the opt
 				SendSmsDTO sendSmsDto = new SendSmsDTO();
 				sendSmsDto.smsRecipients = new List<SmsRecipient> {
-					new SmsRecipient(userDto.Cellphone, userDto.Name)
+					new SmsRecipient(userDto.Cellphone, userDto.GetUserFullname())
 				};
 				var smsTemplate = await _context.Templates.FindAsync(5); // Cellphone verification
 				sendSmsDto.Subject = "Cellphone verification code";
@@ -93,7 +93,7 @@ namespace CloudProperty.Controllers
 					// do something
 				}
 			}
-			return Ok(await _dataCacheService.GetCachedValue(cacheKey));
+			return Ok( await _dataCacheService.GetCachedValue(cacheKey) );
 		}
 
 		[HttpGet("contact-verification/{userOtp}"), Authorize]
@@ -104,8 +104,8 @@ namespace CloudProperty.Controllers
 			userDto = await _userService.GetUserById(AuthUserID);
 			if (userDto == null) { return Unauthorized(); }
 			string cacheKey = userDto.Id.ToString() + "-contact-verification";
-
-			int opt = Convert.ToInt32(await _dataCacheService.GetCachedValue(cacheKey));
+			string cachedValue = await _dataCacheService.GetCachedValue(cacheKey);
+			int opt = Convert.ToInt32(cachedValue);
 			if (userOtp != opt)
 			{
 				throw new Exception("Invalid or expired Otp");
@@ -144,11 +144,14 @@ namespace CloudProperty.Controllers
 			}
 
 			user = new User();
-			CreatePasswordHash(request.Password, out string passwordHash);
+			string passwordSalt = GeneratePasswordSalt();
+			CreatePasswordHash(request.Password, passwordSalt, out string passwordHash);
 			user.Email = request.Email;
 			user.Cellphone = request.Cellphone;
-			user.Name = request.Name;
+			user.FirstName = request.FirstName;
+			user.LastName = request.LastName;
 			user.Password = passwordHash;
+			user.PasswordSalt = passwordSalt;
 			user.CreatedAt = request.CreatedAt;
 			user.UpdatedAt = request.UpdatedAt;
 			try
@@ -159,13 +162,13 @@ namespace CloudProperty.Controllers
 				// send welcome email...                
 				SendEmailDTO sendEmailDto = new SendEmailDTO();
 				sendEmailDto.emailRecipients = new List<EmailRecipient> {
-					new EmailRecipient(user.Email, user.Name)
+					new EmailRecipient(user.Email, user.GetUserFullname() )
 				};
 				sendEmailDto.Subject = "Welcome to cloudproperty";
 				int templateId = 1;
 				sendEmailDto.Body = await _templateService.GetWelcomeMailTemplate(templateId, request);
 
-				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				bool sent = await _communicationService.SendEmail(sendEmailDto, user.Id);
 				if (!sent)
 				{
 					// log here that email failed to sent....
@@ -190,7 +193,7 @@ namespace CloudProperty.Controllers
 				return BadRequest("Invalid credential");
 			}
 
-			if ((user.Email != request.Email) || !verifyPasswordHash(request.Password, user.Password))
+			if ((user.Email != request.Email) || !verifyPasswordHash(request.Password, user.Password, user.PasswordSalt))
 			{
 				return BadRequest("Invalid credentials");
 			}
@@ -239,13 +242,13 @@ namespace CloudProperty.Controllers
 				// send welcome email...                
 				SendEmailDTO sendEmailDto = new SendEmailDTO();
 				sendEmailDto.emailRecipients = new List<EmailRecipient> {
-					new EmailRecipient(user.Email, user.Name)
+					new EmailRecipient(user.Email, user.GetUserFullname() )
 				};
 				sendEmailDto.Subject = "Request for password rest";
 				int templateId = 3;
 				sendEmailDto.Body = await _templateService.GetPasswordResetMailTemplate(templateId, user, url);
 
-				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				bool sent = await _communicationService.SendEmail(sendEmailDto, user.Id);
 				if (!sent)
 				{
 					// log here that email failed to sent....
@@ -277,8 +280,10 @@ namespace CloudProperty.Controllers
 			}
 
 			var user = await _context.Users.FindAsync(userDto.Id);
-			CreatePasswordHash(request.Password, out string passwordHash);
+			string passwordSalt = GeneratePasswordSalt();
+			CreatePasswordHash(request.Password, passwordSalt, out string passwordHash);
 			user.Password = passwordHash;
+			user.PasswordSalt = passwordSalt;
 			user.RefreshToken = null;
 			user.RefreshTokenCreatedAt = null;
 			user.RefreshTokenExpiresAt = null;
@@ -290,13 +295,13 @@ namespace CloudProperty.Controllers
 				// send welcome email...                
 				SendEmailDTO sendEmailDto = new SendEmailDTO();
 				sendEmailDto.emailRecipients = new List<EmailRecipient> {
-					new EmailRecipient(user.Email, user.Name)
+					new EmailRecipient(user.Email, user.GetUserFullname())
 				};
 				sendEmailDto.Subject = "Password updated";
 				int templateId = 4;
 				sendEmailDto.Body = await _templateService.GetPasswordUpdatedMailTemplate(templateId, user);
 
-				bool sent = await _communicationService.SendEmail(sendEmailDto, AuthUserID);
+				bool sent = await _communicationService.SendEmail(sendEmailDto, user.Id);
 				if (!sent)
 				{
 					// log here that email failed to sent....

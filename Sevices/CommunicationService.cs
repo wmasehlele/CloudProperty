@@ -83,7 +83,10 @@ namespace CloudProperty.Sevices
 			email.Body = builder.ToMessageBody();
 
 			bool emailSent = false;
-			string severResponse = String.Empty;
+
+			string severRequest = string.Empty;
+			string severResponse = string.Empty;
+
 			using (var smtp = new SmtpClient())
 			{
 				smtp.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
@@ -103,7 +106,8 @@ namespace CloudProperty.Sevices
 			communicationDto.Status = emailSent ? "Sent" : "Failed";
 			communicationDto.MessageTrigger = sendEmailDto.Subject;
 			communicationDto.SentBy = authUser != null ? authUser.Id : 0;
-			communicationDto.ServerResponse = severResponse;
+			communicationDto.Request = severRequest;
+			communicationDto.Response = severResponse;
 			communicationDto.CreatedAt = DateTime.UtcNow;
 			communicationDto.UpdatedAt = DateTime.UtcNow;
 
@@ -147,20 +151,16 @@ namespace CloudProperty.Sevices
 
 			var httpResponseMessage = await httpClient.PostAsync("v1/message", jsonMessages);
 			bool smsSent = httpResponseMessage.IsSuccessStatusCode;
-			string severResponse = string.Empty;
-			if (smsSent)
-			{
-				using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
-			}
-
-
-
+			string severRequest = textMessages.ToString();
+			string severResponse = await httpResponseMessage.Content.ReadAsStringAsync();
+			
 			var communicationDto = new CommunicationDTO();
 			communicationDto.Type = "Sms";
 			communicationDto.Status = smsSent ? "Sent" : "Failed";
 			communicationDto.MessageTrigger = sendSmsDto.Subject;
 			communicationDto.SentBy = authUser != null ? authUser.Id : 0;
-			communicationDto.ServerResponse = severResponse;
+			communicationDto.Request = severRequest;
+			communicationDto.Response = severResponse;
 			communicationDto.CreatedAt = DateTime.UtcNow;
 			communicationDto.UpdatedAt = DateTime.UtcNow;
 
@@ -182,6 +182,8 @@ namespace CloudProperty.Sevices
 			communication.Status = communicationDto.Status;
 			communication.MessageTrigger = communicationDto.MessageTrigger;
 			communication.SentBy = communicationDto.SentBy;
+			communication.Request = communicationDto.Request;
+			communication.Response = communicationDto.Response;
 			communication.CreatedAt = communicationDto.CreatedAt;
 			communication.UpdatedAt = communicationDto.UpdatedAt;
 
