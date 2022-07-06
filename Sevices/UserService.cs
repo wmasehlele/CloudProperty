@@ -18,7 +18,8 @@ namespace CloudProperty.Sevices
                     .Select(u => new UserDTO()
                     {
                         Id = u.Id,
-                        Name = u.Name,
+                        FirstName = u.FirstName,
+                        LastName = u.LastName,  
                         Email = u.Email,
                         Cellphone = u.Cellphone,
                         EmailVerifiedAt = u.EmailVerifiedAt,
@@ -36,7 +37,8 @@ namespace CloudProperty.Sevices
                     .Where(u => u.Id == Id).Select(user => new UserDTO()
                     {
                         Id = user.Id,
-                        Name = user.Name,
+                        FirstName = user.FirstName,
+                        LastName = user.LastName,   
                         Email = user.Email,
                         Cellphone = user.Cellphone,
                         EmailVerifiedAt = user.EmailVerifiedAt,

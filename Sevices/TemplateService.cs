@@ -20,7 +20,7 @@ namespace CloudProperty.Sevices
 
 			if (template == null) { return string.Empty; }
 
-			string FilePath = Directory.GetCurrentDirectory() + "\\Emails\\";// MainTemplate.html";
+			string FilePath = Directory.GetCurrentDirectory() + "\\Templates\\Emails\\";// MainTemplate.html";
 
 			string mainTemplate = File.ReadAllText(FilePath + "MainTemplate.html");
 			string mailTemplate = File.ReadAllText(FilePath + template.Content);
@@ -34,7 +34,7 @@ namespace CloudProperty.Sevices
 
 			string template = await GetEmailTemplate(templateId);
 
-			string emailBody = string.Format(template, userDto.Name);
+			string emailBody = string.Format(template, userDto.GetUserFullname());
 
 			return emailBody;
 		}
@@ -44,7 +44,7 @@ namespace CloudProperty.Sevices
 
 			string template = await GetEmailTemplate(templateId);
 
-			string emailBody = string.Format(template, userDto.Name, otp.ToString());
+			string emailBody = string.Format(template, userDto.GetUserFullname(), otp.ToString());
 
 			return emailBody;
 		}
@@ -54,7 +54,7 @@ namespace CloudProperty.Sevices
 
 			string template = await GetEmailTemplate(templateId);
 
-			string emailBody = string.Format(template, user.Name, url, url);
+			string emailBody = string.Format(template, user.GetUserFullname(), url, url);
 
 			return emailBody;
 
@@ -65,7 +65,7 @@ namespace CloudProperty.Sevices
 
 			string template = await GetEmailTemplate(templateId);
 
-			string emailBody = string.Format(template, user.Name);
+			string emailBody = string.Format(template, user.GetUserFullname());
 
 			return emailBody;
 		}

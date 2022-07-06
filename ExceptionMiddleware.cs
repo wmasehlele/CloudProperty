@@ -34,7 +34,8 @@ namespace CloudProperty
 			catch (Exception ex)
 			{
 				_logger.LogError(ex);
-				await HandleExceptionAsync(context, ex);
+				throw;
+				//await HandleExceptionAsync(context, ex);
 			}
 		}
 

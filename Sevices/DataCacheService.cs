@@ -25,14 +25,14 @@ namespace CloudProperty.Data
 				try
 				{
 					await _distributedCache.SetStringAsync(key, value, expiration);
-					retries = 5;
+					retries = 100;
 				}
 				catch (Exception exception)
 				{
 					retries++;
 					ex = exception;
 				}
-			} while (retries < 5);
+			} while (retries < 100);
 
 			if (retries >= 5)
 			{
@@ -50,14 +50,14 @@ namespace CloudProperty.Data
 				try
 				{
 					cachedValue = await _distributedCache.GetStringAsync(key);
-					retries = 5;
+					retries = 100;
 				}
 				catch (Exception exception)
 				{
 					retries++;
 					ex = exception;
 				}
-			} while (retries < 5);
+			} while (retries < 100);
 
 			if (retries >= 5)
 			{

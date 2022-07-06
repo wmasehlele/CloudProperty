@@ -18,14 +18,20 @@ namespace CloudProperty.Controllers
 
         protected string FindClaim(string claimName)
         {
-            var claimsIdentity = HttpContext.User.Identity as ClaimsIdentity;
-            var claim = claimsIdentity.FindFirst(claimName);
-
-            if (claim == null)
+            try
             {
-                return null;
+                var claimsIdentity = HttpContext.User.Identity as ClaimsIdentity;
+                var claim = claimsIdentity.FindFirst(claimName);
+
+                if (claim == null)
+                {
+                    return null;
+                }
+                return claim.Value;
             }
-            return claim.Value;
+            catch {
+                return string.Empty;
+            }
         }
 
         protected RefreshToken GenerateRefreshToken(User user)
@@ -77,20 +83,19 @@ namespace CloudProperty.Controllers
             return jwt;
         }
 
-        protected void CreatePasswordHash(string password, out string passwordHash)
+        protected void CreatePasswordHash(string password, string passwordSalt, out string passwordHash)
         {
-            string salt = _configuration.GetSection("AppSettings:secrete").Value;
-            byte[] passwordSalt = System.Text.Encoding.UTF8.GetBytes(salt);
-            using (var hmac = new HMACSHA512(passwordSalt))
+            byte[] pwdSalt = System.Text.Encoding.UTF8.GetBytes(passwordSalt);
+            using (var hmac = new HMACSHA512(pwdSalt))
             {
                 byte[] computeHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
                 passwordHash = Convert.ToBase64String(computeHash);
             }
         }
 
-        protected bool verifyPasswordHash(string password, string passwordHash)
+        protected bool verifyPasswordHash(string password, string passwordHash, string passwordSalt)
         {
-            CreatePasswordHash(password, out string computedHash);
+            CreatePasswordHash(password, passwordSalt, out string computedHash);
             return passwordHash == computedHash;
         }
 
@@ -103,6 +108,13 @@ namespace CloudProperty.Controllers
                 randomNo = randomNo + rnd.Next(0, 10).ToString();
             }
             return Convert.ToInt32(randomNo);
+        }
+
+        public string GeneratePasswordSalt() {
+            using (var hmac = new HMACSHA512())
+            {
+                return Convert.ToBase64String(hmac.Key);
+            }
         }
     }
 }
