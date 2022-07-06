@@ -26,7 +26,6 @@ builder.Services.AddHttpClient("ClickaTell", httpClient =>
 	httpClient.DefaultRequestHeaders.TryAddWithoutValidation(HeaderNames.Authorization, builder.Configuration.GetSection("ClickatellSettings:Key").Value);
 });
 
-
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<DatabaseContext>(options =>
